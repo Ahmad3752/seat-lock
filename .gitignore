@@ -1,4 +1,21 @@
 
+# Dependencies and generated builds
 node_modules/
 dist/
+*.tsbuildinfo
+
+# Secrets and machine-specific configuration
 .env
+.env.*
+!.env.example
+
+# Logs, test output, and local tooling
+*.log
+coverage/
+.cache/
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
