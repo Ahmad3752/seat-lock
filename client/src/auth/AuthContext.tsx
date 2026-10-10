@@ -8,7 +8,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const applySession = useCallback((session: AuthResponse) => { setUser(session.user); setAccessToken(session.accessToken); }, []);
+  const applySession = useCallback((session: AuthResponse) => {
+    setUser(session.user);
+    setAccessToken(session.accessToken);
+    return session.user;
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -20,10 +24,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [applySession]);
 
   const login = useCallback(async (email: string, password: string) => {
-    applySession(await api<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }));
+    return applySession(await api<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }));
   }, [applySession]);
   const register = useCallback(async (name: string, email: string, password: string) => {
-    applySession(await api<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify({ name, email, password }) }));
+    return applySession(await api<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify({ name, email, password }) }));
   }, [applySession]);
   const logout = useCallback(async () => {
     try {

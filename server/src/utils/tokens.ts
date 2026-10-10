@@ -11,7 +11,11 @@ export function createAccessToken(payload: AccessTokenPayload) {
 }
 export function verifyAccessToken(token: string): AccessTokenPayload {
   const payload = jwt.verify(token, env.jwtAccessSecret);
-  if (typeof payload === "string" || !payload.sub || !payload.role) throw new Error("Invalid access token.");
+  if (
+    typeof payload === "string" ||
+    typeof payload.sub !== "string" ||
+    !["customer", "organizer", "admin"].includes(payload.role)
+  ) throw new Error("Invalid access token.");
   return { sub: payload.sub, role: payload.role as AccessTokenPayload["role"] };
 }
 export const createRefreshSecret = () => crypto.randomBytes(48).toString("base64url");

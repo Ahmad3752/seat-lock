@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import { env } from "./config/env.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import authRouter from "./modules/auth/auth.routes.js";
+import dashboardRouter from "./modules/dashboard/dashboard.routes.js";
 
 export function createApp() {
   const app = express();
@@ -16,6 +17,7 @@ export function createApp() {
     res.status(200).json({ success: true, message: "SeatLock API is running." });
   });
   app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/dashboard", dashboardRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

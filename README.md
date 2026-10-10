@@ -1,6 +1,6 @@
 # SeatLock
 
-A TypeScript MERN project for concurrency-safe reserved-seat ticketing. This repository currently completes the project foundation and account authentication phases.
+A TypeScript MERN project for concurrency-safe reserved-seat ticketing. This repository currently completes the project foundation, account authentication, and role-based dashboard phases.
 
 ## Run locally
 
@@ -30,6 +30,9 @@ Vite forwards `/api` requests to the local API on port `5000` during development
 | `POST` | `/api/v1/auth/refresh` | Rotate a valid refresh session and issue a new access token |
 | `POST` | `/api/v1/auth/logout` | Revoke the current refresh session (requires access token) |
 | `GET` | `/api/v1/auth/me` | Read the signed-in user (requires access token) |
+| `GET` | `/api/v1/dashboard/customer` | Customer booking dashboard (customer or organizer) |
+| `GET` | `/api/v1/dashboard/organizer` | Organizer dashboard (organizer or admin) |
+| `GET` | `/api/v1/dashboard/admin` | Platform moderation dashboard (admin only) |
 | `GET` | `/api/health` | API health check |
 
 ## Design notes
@@ -37,4 +40,5 @@ Vite forwards `/api` requests to the local API on port `5000` during development
 - The `User` model normalizes unique email addresses and stores bcrypt password hashes—not passwords.
 - Access tokens are signed JWTs with a short expiry. Refresh tokens are random, hashed before storage, rotated on use, and delivered only in an HttpOnly cookie.
 - The API sends consistent errors: `{ "error": { "code", "message", "details?" } }`.
-- `requireAuth` and `requireRole` are reusable server middleware for later event, venue, seat-hold, and organizer routes.
+- `requireAuth` establishes identity; `requireRole` enforces authorization. `assertOrganizerOwnership` is ready for the venue/event controllers in the next phase, where it will restrict organizers to records with their own `organizerId` (admins may moderate all records).
+- Self-registration deliberately creates only customer accounts. Promote trusted accounts to `organizer` or `admin` directly in the database until the admin user-management UI is built.
