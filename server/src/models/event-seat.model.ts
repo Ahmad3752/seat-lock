@@ -10,8 +10,10 @@ const eventSeatSchema = new Schema({
   label: { type: String, required: true },
   gridRow: { type: Number, required: true, min: 1 },
   gridColumn: { type: Number, required: true, min: 1 },
+  type: { type: String, required: true, trim: true, default: "standard" },
+  isAccessible: { type: Boolean, required: true, default: false },
   price: { type: Number, required: true, min: 0 },
-  status: { type: String, enum: ["available", "held", "booked"], default: "available", index: true },
+  status: { type: String, enum: ["available", "held", "booked", "blocked"], default: "available", index: true },
 }, { timestamps: true });
 
 eventSeatSchema.index({ eventId: 1, seatKey: 1 }, { unique: true });

@@ -39,6 +39,7 @@ export function eventInput(body: unknown, partial = false) {
   const input = record(body);
   const result: Record<string, unknown> = {};
   if (!partial || "title" in input) result.title = requiredText(input.title, "Event title", 2, 150);
+  if (!partial || "description" in input) result.description = requiredText(input.description, "Description", 10, 2_000);
   if (!partial || "category" in input) result.category = requiredText(input.category, "Category", 2, 60);
   if (!partial || "imageUrl" in input) {
     const imageUrl = typeof input.imageUrl === "string" ? input.imageUrl.trim() : "";
@@ -48,12 +49,17 @@ export function eventInput(body: unknown, partial = false) {
   }
   if (!partial || "startsAt" in input) result.startsAt = validDate(input.startsAt, "Start date");
   if (!partial || "endsAt" in input) result.endsAt = validDate(input.endsAt, "End date");
+  if (!partial || "saleStartsAt" in input) result.saleStartsAt = optionalDate(input.saleStartsAt, "Sale start date");
+  if (!partial || "saleEndsAt" in input) result.saleEndsAt = optionalDate(input.saleEndsAt, "Sale end date");
   if (!partial || "timezone" in input) result.timezone = requiredText(input.timezone, "Timezone", 2, 80);
   if (!partial || "currency" in input) result.currency = requiredText(input.currency, "Currency", 3, 3).toUpperCase();
   if (!partial || "sectionPrices" in input) result.sectionPrices = prices(input.sectionPrices);
   if ("venueId" in input && !partial) {
     if (typeof input.venueId !== "string" || !Types.ObjectId.isValid(input.venueId)) throw new AppError(422, "VALIDATION_ERROR", "Select a valid venue.");
     result.venueId = input.venueId;
+  }
+  if (result.saleStartsAt instanceof Date && result.saleEndsAt instanceof Date && result.saleStartsAt >= result.saleEndsAt) {
+    throw new AppError(422, "VALIDATION_ERROR", "Sale end date must be after the sale start date.");
   }
   return result;
 }
@@ -62,6 +68,11 @@ function validDate(value: unknown, label: string) {
   const date = value instanceof Date ? value : new Date(typeof value === "string" ? value : "");
   if (Number.isNaN(date.getTime())) throw new AppError(422, "VALIDATION_ERROR", `${label} must be valid.`);
   return date;
+}
+
+function optionalDate(value: unknown, label: string) {
+  if (value === undefined || value === null || value === "") return undefined;
+  return validDate(value, label);
 }
 
 function prices(value: unknown): SectionPrice[] {

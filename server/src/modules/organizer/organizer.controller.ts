@@ -21,10 +21,10 @@ function venueDto(venue: { _id: Types.ObjectId; name: string; address: string; s
   return { id: venue._id.toString(), organizerId: venue.organizerId.toString(), name: venue.name, address: venue.address, seats: venue.seats, seatCount: venue.seats.length, createdAt: venue.createdAt };
 }
 
-function eventDto(event: { _id: Types.ObjectId; organizerId: Types.ObjectId; venueId: Types.ObjectId; title: string; category: string; imageUrl: string; startsAt: Date; endsAt: Date; timezone: string; status: string; currency: string; sectionPrices: SectionPrice[]; createdAt: Date }) {
+function eventDto(event: { _id: Types.ObjectId; organizerId: Types.ObjectId; venueId: Types.ObjectId; title: string; slug: string; description: string; category: string; imageUrl: string; startsAt: Date; endsAt: Date; saleStartsAt?: Date | null; saleEndsAt?: Date | null; timezone: string; status: string; currency: string; sectionPrices: SectionPrice[]; createdAt: Date }) {
   return {
-    id: event._id.toString(), organizerId: event.organizerId.toString(), venueId: event.venueId.toString(), title: event.title,
-    category: event.category, imageUrl: event.imageUrl, startsAt: event.startsAt, endsAt: event.endsAt, timezone: event.timezone,
+    id: event._id.toString(), organizerId: event.organizerId.toString(), venueId: event.venueId.toString(), title: event.title, slug: event.slug, description: event.description,
+    category: event.category, imageUrl: event.imageUrl, startsAt: event.startsAt, endsAt: event.endsAt, saleStartsAt: event.saleStartsAt, saleEndsAt: event.saleEndsAt, timezone: event.timezone,
     status: event.status, currency: event.currency, sectionPrices: event.sectionPrices, createdAt: event.createdAt,
   };
 }
@@ -55,6 +55,10 @@ function priceMap(venueSeats: VenueSeat[], sectionPrices: SectionPrice[]) {
 
 function ensureChronological(startsAt: Date, endsAt: Date) {
   if (startsAt >= endsAt) throw new AppError(422, "VALIDATION_ERROR", "End date must be after the start date.");
+}
+
+function ensureSaleWindow(saleStartsAt?: Date | null, saleEndsAt?: Date | null) {
+  if (saleStartsAt && saleEndsAt && saleStartsAt >= saleEndsAt) throw new AppError(422, "VALIDATION_ERROR", "Sale end date must be after the sale start date.");
 }
 
 function organizerFilter(user: NonNullable<Express.Request["user"]>) {
@@ -102,6 +106,7 @@ export const createEvent: RequestHandler = asyncHandler(async (req, res) => {
   const endsAt = input.endsAt as Date;
   const sectionPrices = input.sectionPrices as SectionPrice[];
   ensureChronological(startsAt, endsAt);
+  ensureSaleWindow(input.saleStartsAt as Date | undefined, input.saleEndsAt as Date | undefined);
   const prices = priceMap(venue.seats as VenueSeat[], sectionPrices);
 
   const event = new Event({ ...input, organizerId: req.user!.sub, venueId });
@@ -117,6 +122,8 @@ export const createEvent: RequestHandler = asyncHandler(async (req, res) => {
       label: seat.label,
       gridRow: seat.gridRow,
       gridColumn: seat.gridColumn,
+      type: "standard",
+      isAccessible: false,
       price: prices.get(seat.section),
       status: "available",
     })), { ordered: true });
@@ -150,6 +157,9 @@ export const updateEvent: RequestHandler = asyncHandler(async (req, res) => {
   const startsAt = (updates.startsAt as Date | undefined) ?? event.startsAt;
   const endsAt = (updates.endsAt as Date | undefined) ?? event.endsAt;
   ensureChronological(startsAt, endsAt);
+  const saleStartsAt = (updates.saleStartsAt as Date | undefined) ?? event.saleStartsAt;
+  const saleEndsAt = (updates.saleEndsAt as Date | undefined) ?? event.saleEndsAt;
+  ensureSaleWindow(saleStartsAt, saleEndsAt);
   if (updates.sectionPrices) {
     const venue = await Venue.findById(event.venueId);
     if (!venue) throw new AppError(409, "VENUE_UNAVAILABLE", "The event venue is no longer available.");
