@@ -3,6 +3,7 @@ import { useAuth } from "./auth/useAuth";
 import type { AuthUser, UserRole } from "./auth/auth-context";
 import { ApiError } from "./lib/api";
 import { EventFormPage, EventListPage, VenueFormPage, VenueListPage } from "./organizer/OrganizerPages";
+import { EventCataloguePage, PublicEventDetailPage } from "./public-events/PublicEventPages";
 import "./App.css";
 
 type Mode = "login" | "register";
@@ -40,6 +41,7 @@ function Navigation({ user, navigate, logout }: { user: AuthUser; navigate: (to:
   return <header className="site-header">
     <RouteLink to="/" navigate={navigate} className="brand"><span className="brand-mark">S</span><span>SeatLock</span></RouteLink>
     <nav aria-label="Main navigation">
+      <RouteLink to="/events" navigate={navigate}>Events</RouteLink>
       {(user.role === "customer" || user.role === "organizer") && <RouteLink to="/dashboard" navigate={navigate}>Dashboard</RouteLink>}
       {user.role === "organizer" && <RouteLink to="/organizer" navigate={navigate}>Organizer</RouteLink>}
       {user.role === "admin" && <RouteLink to="/admin" navigate={navigate}>Admin</RouteLink>}
@@ -49,7 +51,14 @@ function Navigation({ user, navigate, logout }: { user: AuthUser; navigate: (to:
   </header>;
 }
 
-function AuthScreen({ navigate }: { navigate: (to: string) => void }) {
+function PublicNavigation({ navigate }: { navigate: (to: string) => void }) {
+  return <header className="site-header">
+    <RouteLink to="/events" navigate={navigate} className="brand"><span className="brand-mark">S</span><span>SeatLock</span></RouteLink>
+    <nav aria-label="Main navigation"><RouteLink to="/events" navigate={navigate}>Events</RouteLink><RouteLink to="/login" navigate={navigate}>Sign in</RouteLink></nav>
+  </header>;
+}
+
+function AuthScreen({ navigate, returnTo }: { navigate: (to: string) => void; returnTo?: string }) {
   const { login, register } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
@@ -64,7 +73,7 @@ function AuthScreen({ navigate }: { navigate: (to: string) => void }) {
     setIsSubmitting(true);
     try {
       const signedInUser = mode === "register" ? await register(name, email, password) : await login(email, password);
-      navigate(defaultPath(signedInUser.role));
+      navigate(returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : defaultPath(signedInUser.role));
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Unable to complete that request.");
     } finally {
@@ -146,7 +155,12 @@ function App() {
   const { user, isLoading, logout } = useAuth();
   const { pathname, navigate } = usePathname();
   if (isLoading) return <main className="loading-page"><p className="muted">Restoring your session…</p></main>;
-  if (!user) return <main className="auth-page"><header className="brand"><span className="brand-mark">S</span><span>SeatLock</span></header><AuthScreen navigate={navigate} /></main>;
+  const eventSlug = /^\/events\/([^/]+)$/.exec(pathname)?.[1];
+  if (pathname === "/events" || eventSlug) return <main className="app-page"><PublicNavigation navigate={navigate} />{pathname === "/events" ? <EventCataloguePage navigate={navigate} /> : <PublicEventDetailPage key={eventSlug} slug={eventSlug!} navigate={navigate} user={user} />}</main>;
+  if (!user) {
+    const returnTo = new URLSearchParams(window.location.search).get("returnTo") ?? undefined;
+    return <main className="auth-page"><header className="brand"><span className="brand-mark">S</span><span>SeatLock</span></header><AuthScreen navigate={navigate} returnTo={returnTo} /></main>;
+  }
 
   let content;
   if (pathname === "/") content = <section className="card dashboard-card"><p className="eyebrow">SIGNED IN</p><h1>Welcome, {user.name}.</h1><p className="muted">Your {user.role} account is ready.</p><button type="button" onClick={() => navigate(defaultPath(user.role))}>Open my dashboard</button></section>;
