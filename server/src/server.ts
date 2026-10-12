@@ -2,11 +2,13 @@
 import { connectDatabase } from "./config/database.js";
 import { env } from "./config/env.js";
 import { createApp } from "./app.js";
+import { seedDevelopmentDemoUsers } from "./config/demo-users.js";
 
 const app = createApp();
 
 async function startServer() {
   await connectDatabase();
+  await seedDevelopmentDemoUsers();
 
   const server = app.listen(env.port, () => {
     console.log(`SeatLock API running at http://localhost:${env.port}`);

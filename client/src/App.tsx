@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type PropsWithChildren } from "rea
 import { useAuth } from "./auth/useAuth";
 import type { AuthUser, UserRole } from "./auth/auth-context";
 import { ApiError } from "./lib/api";
+import { EventFormPage, EventListPage, VenueFormPage, VenueListPage } from "./organizer/OrganizerPages";
 import "./App.css";
 
 type Mode = "login" | "register";
@@ -71,17 +72,39 @@ function AuthScreen({ navigate }: { navigate: (to: string) => void }) {
     }
   }
 
+  async function signInWithDemo(username: "organizer" | "admin") {
+    setError("");
+    setIsSubmitting(true);
+    try {
+      const signedInUser = await login(username, "12345678");
+      navigate(defaultPath(signedInUser.role));
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Unable to complete that request.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return <section className="card auth-card" aria-labelledby="auth-heading">
     <p className="eyebrow">ACCOUNT</p>
     <h1 id="auth-heading">{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-    <p className="muted">{mode === "login" ? "Sign in to start reserving seats." : "Start as a customer. Organizer access is assigned securely."}</p>
+    <p className="muted">{mode === "login" ? "Customer sign-in uses your registered email and password." : "Start as a customer. Organizer access is assigned securely."}</p>
     <form onSubmit={(event) => void submit(event)}>
       {mode === "register" && <label>Full name<input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required minLength={2} maxLength={80} /></label>}
-      <label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required /></label>
+      <label>{mode === "login" ? "Email address or demo username" : "Email address"}<input type={mode === "login" ? "text" : "email"} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete={mode === "login" ? "username" : "email"} required /></label>
       <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={8} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
       <button type="submit" disabled={isSubmitting}>{isSubmitting ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
     </form>
+    {mode === "login" && <div className="demo-logins">
+      <p className="demo-title">Development role demos</p>
+      <p>Use these local-only accounts to see the organizer and admin areas.</p>
+      <div className="demo-actions">
+        <button type="button" className="secondary" disabled={isSubmitting} onClick={() => void signInWithDemo("organizer")}>Sign in as organizer</button>
+        <button type="button" className="secondary" disabled={isSubmitting} onClick={() => void signInWithDemo("admin")}>Sign in as admin</button>
+      </div>
+      <p className="demo-credentials">Organizer: <code>organizer</code> · Admin: <code>admin</code> · Password: <code>12345678</code></p>
+    </div>}
     <p className="switch">{mode === "login" ? "New to SeatLock?" : "Already have an account?"} <button type="button" className="link" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "Create one" : "Sign in"}</button></p>
   </section>;
 }
@@ -97,10 +120,10 @@ function CustomerDashboard({ user }: { user: AuthUser }) {
   </DashboardShell>;
 }
 
-function OrganizerDashboard({ user }: { user: AuthUser }) {
+function OrganizerDashboard({ user, navigate }: { user: AuthUser; navigate: (to: string) => void }) {
   return <DashboardShell eyebrow="ORGANIZER DASHBOARD" title={`Manage your events, ${user.name}.`} description="This workspace is limited to venues and events that you own.">
-    <DashboardCard title="My events" text="Create, publish, and monitor your events in the next phase." action="Create event" />
-    <DashboardCard title="Venues" text="Build reusable venues and grid-based seating plans in Part 3." action="Create venue" />
+    <DashboardCard title="My events" text="Create draft events, set prices, and publish when ready." action="Manage events" onAction={() => navigate("/organizer/events")} />
+    <DashboardCard title="Venues" text="Build reusable venues and grid-based seating plans." action="Manage venues" onAction={() => navigate("/organizer/venues")} />
   </DashboardShell>;
 }
 
@@ -115,8 +138,8 @@ function DashboardShell({ eyebrow, title, description, children }: PropsWithChil
   return <section className="dashboard" aria-labelledby="dashboard-heading"><div className="dashboard-intro"><p className="eyebrow">{eyebrow}</p><h1 id="dashboard-heading">{title}</h1><p className="muted">{description}</p></div><div className="dashboard-grid">{children}</div></section>;
 }
 
-function DashboardCard({ title, text, action, mutedAction = false }: { title: string; text: string; action: string; mutedAction?: boolean }) {
-  return <article className="card dashboard-card"><h2>{title}</h2><p>{text}</p><button type="button" className={mutedAction ? "secondary" : ""} disabled={mutedAction}>{action}</button></article>;
+function DashboardCard({ title, text, action, mutedAction = false, onAction }: { title: string; text: string; action: string; mutedAction?: boolean; onAction?: () => void }) {
+  return <article className="card dashboard-card"><h2>{title}</h2><p>{text}</p><button type="button" className={mutedAction ? "secondary" : ""} disabled={mutedAction} onClick={onAction}>{action}</button></article>;
 }
 
 function App() {
@@ -128,7 +151,13 @@ function App() {
   let content;
   if (pathname === "/") content = <section className="card dashboard-card"><p className="eyebrow">SIGNED IN</p><h1>Welcome, {user.name}.</h1><p className="muted">Your {user.role} account is ready.</p><button type="button" onClick={() => navigate(defaultPath(user.role))}>Open my dashboard</button></section>;
   else if (pathname === "/dashboard") content = user.role === "customer" || user.role === "organizer" ? <CustomerDashboard user={user} /> : <AccessDenied user={user} navigate={navigate} />;
-  else if (pathname === "/organizer") content = user.role === "organizer" || user.role === "admin" ? <OrganizerDashboard user={user} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (pathname === "/organizer/venues") content = user.role === "organizer" || user.role === "admin" ? <VenueListPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (pathname === "/organizer/venues/new") content = user.role === "organizer" || user.role === "admin" ? <VenueFormPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (/^\/organizer\/venues\/[^/]+\/edit$/.test(pathname)) content = user.role === "organizer" || user.role === "admin" ? <VenueFormPage navigate={navigate} venueId={pathname.split("/")[3]} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (pathname === "/organizer/events") content = user.role === "organizer" || user.role === "admin" ? <EventListPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (pathname === "/organizer/events/new") content = user.role === "organizer" || user.role === "admin" ? <EventFormPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (/^\/organizer\/events\/[^/]+\/edit$/.test(pathname)) content = user.role === "organizer" || user.role === "admin" ? <EventFormPage navigate={navigate} eventId={pathname.split("/")[3]} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (pathname === "/organizer") content = user.role === "organizer" || user.role === "admin" ? <OrganizerDashboard user={user} navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (pathname === "/admin") content = user.role === "admin" ? <AdminDashboard user={user} /> : <AccessDenied user={user} navigate={navigate} />;
   else content = <AccessDenied user={user} navigate={navigate} />;
   return <main className="app-page"><Navigation user={user} navigate={navigate} logout={logout} />{content}</main>;

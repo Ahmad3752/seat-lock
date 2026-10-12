@@ -1,0 +1,21 @@
+import { Schema, model, type InferSchemaType } from "mongoose";
+
+const eventSeatSchema = new Schema({
+  eventId: { type: Schema.Types.ObjectId, ref: "Event", required: true, index: true },
+  venueId: { type: Schema.Types.ObjectId, ref: "Venue", required: true },
+  seatKey: { type: String, required: true },
+  section: { type: String, required: true },
+  row: { type: String, required: true },
+  number: { type: Number, required: true, min: 1 },
+  label: { type: String, required: true },
+  gridRow: { type: Number, required: true, min: 1 },
+  gridColumn: { type: Number, required: true, min: 1 },
+  price: { type: Number, required: true, min: 0 },
+  status: { type: String, enum: ["available", "held", "booked"], default: "available", index: true },
+}, { timestamps: true });
+
+eventSeatSchema.index({ eventId: 1, seatKey: 1 }, { unique: true });
+eventSeatSchema.index({ eventId: 1, status: 1 });
+
+export type EventSeatDocument = InferSchemaType<typeof eventSeatSchema>;
+export const EventSeat = model("EventSeat", eventSeatSchema);

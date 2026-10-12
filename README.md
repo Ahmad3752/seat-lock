@@ -33,6 +33,12 @@ Vite forwards `/api` requests to the local API on port `5000` during development
 | `GET` | `/api/v1/dashboard/customer` | Customer booking dashboard (customer or organizer) |
 | `GET` | `/api/v1/dashboard/organizer` | Organizer dashboard (organizer or admin) |
 | `GET` | `/api/v1/dashboard/admin` | Platform moderation dashboard (admin only) |
+| `POST` | `/api/v1/organizer/venues` | Create an organizer-owned venue and generated seat grid |
+| `GET` | `/api/v1/organizer/venues` | List the organizer's venues |
+| `POST` | `/api/v1/organizer/events` | Create a draft event and its independent event-seat inventory |
+| `GET` | `/api/v1/organizer/events` | List the organizer's events |
+| `PATCH` | `/api/v1/organizer/events/:eventId` | Edit a draft event |
+| `POST` | `/api/v1/organizer/events/:eventId/publish` | Publish a complete draft event |
 | `GET` | `/api/health` | API health check |
 
 ## Design notes
@@ -42,3 +48,5 @@ Vite forwards `/api` requests to the local API on port `5000` during development
 - The API sends consistent errors: `{ "error": { "code", "message", "details?" } }`.
 - `requireAuth` establishes identity; `requireRole` enforces authorization. `assertOrganizerOwnership` is ready for the venue/event controllers in the next phase, where it will restrict organizers to records with their own `organizerId` (admins may moderate all records).
 - Self-registration deliberately creates only customer accounts. Promote trusted accounts to `organizer` or `admin` directly in the database until the admin user-management UI is built.
+- In development only, the server creates demo accounts at startup: usernames `organizer` and `admin`, both using password `12345678`. The sign-in screen exposes buttons for them. These accounts are disabled in production.
+- Creating an event copies every venue seat into its own `EventSeat` document. A unique `eventId + seatKey` index keeps one independent inventory record per seat per event, ready for holding and booking in Part 5.

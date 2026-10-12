@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import type { Request, Response } from "express";
 import { Types } from "mongoose";
 import { env } from "../../config/env.js";
+import { demoUsernameToEmail } from "../../config/demo-users.js";
 import { AppError } from "../../errors/app-error.js";
 import { RefreshSession } from "../../models/refresh-session.model.js";
 import { User } from "../../models/user.model.js";
@@ -15,10 +16,11 @@ function userDto(user: { _id: Types.ObjectId; name: string; email: string; role:
   return { id: user._id.toString(), name: user.name, email: user.email, role: user.role as Role };
 }
 
-function credentials(body: unknown, needsName = false) {
+function credentials(body: unknown, needsName = false, allowDemoUsername = false) {
   if (typeof body !== "object" || body === null) throw new AppError(400, "INVALID_REQUEST", "Request body must be a JSON object.");
   const input = body as Record<string, unknown>;
-  const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+  const identifier = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+  const email = allowDemoUsername ? (demoUsernameToEmail(identifier) ?? identifier) : identifier;
   const password = typeof input.password === "string" ? input.password : "";
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const problems: string[] = [];
@@ -64,7 +66,7 @@ export const register = asyncHandler(async (req, res) => {
 });
 
 export const login = asyncHandler(async (req, res) => {
-  const { email, password } = credentials(req.body);
+  const { email, password } = credentials(req.body, false, true);
   const user = await User.findOne({ email }).select("+passwordHash");
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
     throw new AppError(401, "INVALID_CREDENTIALS", "Email or password is incorrect.");

@@ -5,6 +5,7 @@ import { env } from "./config/env.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import authRouter from "./modules/auth/auth.routes.js";
 import dashboardRouter from "./modules/dashboard/dashboard.routes.js";
+import organizerRouter from "./modules/organizer/organizer.routes.js";
 
 export function createApp() {
   const app = express();
@@ -18,6 +19,7 @@ export function createApp() {
   });
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/dashboard", dashboardRouter);
+  app.use("/api/v1/organizer", organizerRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
