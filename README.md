@@ -39,6 +39,9 @@ Vite forwards `/api` requests to the local API on port `5000` during development
 | `GET` | `/api/v1/organizer/events` | List the organizer's events |
 | `PATCH` | `/api/v1/organizer/events/:eventId` | Edit a draft event |
 | `POST` | `/api/v1/organizer/events/:eventId/publish` | Publish a complete draft event |
+| `GET` | `/api/v1/events` | Browse upcoming published events with optional search, category, city, and date filters |
+| `GET` | `/api/v1/events/:slug` | Read one upcoming published event and its public pricing and venue details |
+| `GET` | `/api/v1/events/:eventId/seats` | Read the current public seat map for one upcoming published event |
 | `GET` | `/api/health` | API health check |
 
 ## Design notes
@@ -50,3 +53,4 @@ Vite forwards `/api` requests to the local API on port `5000` during development
 - Self-registration deliberately creates only customer accounts. Promote trusted accounts to `organizer` or `admin` directly in the database until the admin user-management UI is built.
 - In development only, the server creates demo accounts at startup: usernames `organizer` and `admin`, both using password `12345678`. The sign-in screen exposes buttons for them. These accounts are disabled in production.
 - Creating an event copies every venue seat into its own `EventSeat` document. A unique `eventId + seatKey` index keeps one independent inventory record per seat per event, ready for holding and booking in Part 5.
+- Public event selection is temporary browser state only in this phase. It never reserves, holds, books, or pays for a seat; reservation begins in the next phase.
