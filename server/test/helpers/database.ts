@@ -1,4 +1,5 @@
 import { after, afterEach, before } from "node:test";
+import path from "node:path";
 import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 
@@ -6,7 +7,7 @@ export function installTestDatabase() {
   let database: MongoMemoryServer;
 
   before(async () => {
-    database = await MongoMemoryServer.create();
+    database = await MongoMemoryServer.create({ binary: { downloadDir: path.resolve(process.cwd(), ".mongodb-binaries") } });
     await mongoose.connect(database.getUri());
   });
 
@@ -16,6 +17,6 @@ export function installTestDatabase() {
 
   after(async () => {
     await mongoose.disconnect();
-    await database.stop();
+    await database?.stop();
   });
 }
