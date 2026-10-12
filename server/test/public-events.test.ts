@@ -71,6 +71,9 @@ test("public event listing rejects invalid date ranges", async () => {
 
   const reversed = await request(app).get("/api/v1/events").query({ from: "2027-06-10", to: "2027-06-01" }).expect(422);
   assert.equal(reversed.body.error.code, "VALIDATION_ERROR");
+
+  const impossible = await request(app).get("/api/v1/events").query({ from: "2027-02-30" }).expect(422);
+  assert.equal(impossible.body.error.code, "VALIDATION_ERROR");
 });
 
 test("unpublished and missing public event details and seat maps return not found", async () => {
@@ -80,6 +83,39 @@ test("unpublished and missing public event details and seat maps return not foun
     const response = await request(app).get(path).expect(404);
     assert.equal(response.body.error.code, "NOT_FOUND");
   }
+});
+
+test("malformed public event slugs return the standard not found envelope", async () => {
+  const response = await request(app).get("/api/v1/events/%ZZ").expect(404);
+  assert.equal(response.body.error.code, "NOT_FOUND");
+});
+
+test("legacy events and seats receive safe public fallbacks", async () => {
+  const legacyId = new Types.ObjectId();
+  await Event.collection.insertOne({
+    _id: legacyId,
+    organizerId,
+    venueId,
+    title: "Legacy public event",
+    category: "Music",
+    imageUrl: "",
+    startsAt: future(9),
+    endsAt: future(9.2),
+    timezone: "Asia/Karachi",
+    status: "published",
+    currency: "PKR",
+    sectionPrices: [{ section: "A", amount: 1800 }],
+  });
+  await EventSeat.collection.insertOne({ eventId: legacyId, venueId, seatKey: "A:A:1", section: "A", row: "A", number: 1, label: "A-01", gridRow: 1, gridColumn: 1, price: 1800, status: "available" });
+
+  const catalogue = await request(app).get("/api/v1/events").expect(200);
+  assert.equal(catalogue.body.data.events.find((event: { id: string }) => event.id === legacyId.toString()).slug, legacyId.toString());
+
+  const detail = await request(app).get(`/api/v1/events/${legacyId}`).expect(200);
+  assert.equal(detail.body.data.event.description, "");
+  const seats = await request(app).get(`/api/v1/events/${legacyId}/seats`).expect(200);
+  assert.equal(seats.body.data.seats[0].type, "standard");
+  assert.deepEqual(seats.body.data.seats[0].accessibility, { isAccessible: false });
 });
 
 test("public seat maps exclude hold, booking, and audit data", async () => {

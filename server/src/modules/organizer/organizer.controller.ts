@@ -157,8 +157,8 @@ export const updateEvent: RequestHandler = asyncHandler(async (req, res) => {
   const startsAt = (updates.startsAt as Date | undefined) ?? event.startsAt;
   const endsAt = (updates.endsAt as Date | undefined) ?? event.endsAt;
   ensureChronological(startsAt, endsAt);
-  const saleStartsAt = (updates.saleStartsAt as Date | undefined) ?? event.saleStartsAt;
-  const saleEndsAt = (updates.saleEndsAt as Date | undefined) ?? event.saleEndsAt;
+  const saleStartsAt = Object.hasOwn(updates, "saleStartsAt") ? updates.saleStartsAt as Date | null : event.saleStartsAt;
+  const saleEndsAt = Object.hasOwn(updates, "saleEndsAt") ? updates.saleEndsAt as Date | null : event.saleEndsAt;
   ensureSaleWindow(saleStartsAt, saleEndsAt);
   if (updates.sectionPrices) {
     const venue = await Venue.findById(event.venueId);

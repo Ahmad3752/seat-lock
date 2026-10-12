@@ -100,7 +100,7 @@ export function EventFormPage({ navigate, eventId }: { navigate: Navigate; event
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(""); setSaving(true);
     try {
-      const eventDetails = { title, description, category, imageUrl, startsAt, endsAt, saleStartsAt: saleStartsAt || undefined, saleEndsAt: saleEndsAt || undefined, timezone, currency, sectionPrices: prices };
+      const eventDetails = { title, description, category, imageUrl, startsAt, endsAt, saleStartsAt: saleStartsAt || null, saleEndsAt: saleEndsAt || null, timezone, currency, sectionPrices: prices };
       const body = eventId ? eventDetails : { venueId, ...eventDetails };
       const response = eventId ? await api<{ event: OrganizerEvent }>(`/organizer/events/${eventId}`, { method: "PATCH", ...auth(accessToken), body: JSON.stringify(body) }) : await api<{ event: OrganizerEvent }>("/organizer/events", { method: "POST", ...auth(accessToken), body: JSON.stringify(body) });
       navigate(`/organizer/events/${response.event.id}/edit`);

@@ -14,8 +14,8 @@ type PublicEvent = {
   _id: Types.ObjectId;
   venueId: Types.ObjectId;
   title: string;
-  slug: string;
-  description: string;
+  slug?: string;
+  description?: string;
   category: string;
   imageUrl: string;
   startsAt: Date;
@@ -50,6 +50,11 @@ function optionalText(value: unknown, label: string) {
 function optionalDate(value: unknown, label: string, endOfDay = false) {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || !value.trim()) throw new AppError(422, "VALIDATION_ERROR", `${label} must be a valid date.`);
+  const calendar = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(value);
+  if (!calendar) throw new AppError(422, "VALIDATION_ERROR", `${label} must be a valid date.`);
+  const [year, month, day] = calendar.slice(1).map(Number);
+  const check = new Date(Date.UTC(year!, month! - 1, day!));
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month! - 1 || check.getUTCDate() !== day) throw new AppError(422, "VALIDATION_ERROR", `${label} must be a valid date.`);
   const normalized = endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T23:59:59.999Z` : value;
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) throw new AppError(422, "VALIDATION_ERROR", `${label} must be a valid date.`);
@@ -68,12 +73,12 @@ function saleAvailability(event: PublicEvent) {
 }
 
 function publicCard(event: PublicEvent, venue: VenueSummary) {
-  return { id: event._id.toString(), slug: event.slug, title: event.title, category: event.category, posterUrl: event.imageUrl, startsAt: event.startsAt, priceFrom: pricingSummary(event.sectionPrices).from, venue: { name: venue.name, address: venue.address } };
+  return { id: event._id.toString(), slug: event.slug || event._id.toString(), title: event.title, category: event.category, posterUrl: event.imageUrl, startsAt: event.startsAt, priceFrom: pricingSummary(event.sectionPrices).from, venue: { name: venue.name, address: venue.address } };
 }
 
 function publicDetail(event: PublicEvent, venue: VenueSummary) {
   return {
-    id: event._id.toString(), slug: event.slug, title: event.title, description: event.description, posterUrl: event.imageUrl, category: event.category,
+    id: event._id.toString(), slug: event.slug || event._id.toString(), title: event.title, description: event.description || "", posterUrl: event.imageUrl, category: event.category,
     venue: { name: venue.name, address: venue.address }, startsAt: event.startsAt, endsAt: event.endsAt, timezone: event.timezone,
     currency: event.currency, sale: saleAvailability(event), pricing: pricingSummary(event.sectionPrices),
   };
@@ -112,7 +117,9 @@ export const getPublicEvent: RequestHandler = asyncHandler(async (req, res) => {
   const now = new Date();
   const slug = routeParam(req.params.slug);
   if (!slug) throw notFound();
-  const [event] = await Event.find({ slug, status: "published", startsAt: { $gte: now } }).limit(1).lean() as unknown as PublicEvent[];
+  const visibility: Record<string, unknown> = { status: "published", startsAt: { $gte: now } };
+  visibility.$or = Types.ObjectId.isValid(slug) ? [{ slug }, { _id: slug }] : [{ slug }];
+  const [event] = await Event.find(visibility).limit(1).lean() as unknown as PublicEvent[];
   if (!event) throw notFound();
   const venue = await Venue.findById(event.venueId).select("name address").lean() as unknown as VenueSummary | null;
   if (!venue) throw notFound();
@@ -127,6 +134,6 @@ export const getPublicEventSeats: RequestHandler = asyncHandler(async (req, res)
   const seats = await EventSeat.find({ eventId: event._id }).sort({ gridRow: 1, gridColumn: 1 }).lean();
   res.status(200).json({ data: { seats: seats.map((seat) => ({
     id: seat._id.toString(), label: seat.label, section: seat.section, row: seat.row, number: seat.number,
-    x: seat.gridColumn, y: seat.gridRow, type: seat.type, accessibility: { isAccessible: seat.isAccessible }, price: seat.price, state: seat.status,
+    x: seat.gridColumn, y: seat.gridRow, type: seat.type || "standard", accessibility: { isAccessible: Boolean(seat.isAccessible) }, price: seat.price, state: seat.status,
   })) } });
 });

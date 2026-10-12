@@ -8,7 +8,7 @@ type PublicEventCard = { id: string; slug: string; title: string; category: stri
 type PublicEventDetail = { id: string; slug: string; title: string; description: string; posterUrl: string; category: string; venue: { name: string; address: string }; startsAt: string; endsAt: string; timezone: string; currency: string; sale: { startsAt: string | null; endsAt: string | null; isOpen: boolean }; pricing: { from: number; to: number; sections: Array<{ section: string; amount: number }> } };
 
 const emptyFilters: EventFilters = { q: "", category: "", city: "", from: "", to: "" };
-const money = (amount: number) => new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", maximumFractionDigits: 0 }).format(amount);
+const money = (amount: number) => new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR" }).format(amount);
 const dateTime = (value: string) => new Intl.DateTimeFormat("en-PK", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 const readableError = (caught: unknown, fallback: string) => caught instanceof ApiError ? caught.message : fallback;
 
@@ -51,10 +51,11 @@ export function EventCataloguePage({ navigate }: { navigate: Navigate }) {
   }
 
   function clearFilters() {
-    setFilters(emptyFilters);
+    const cleared = { ...emptyFilters };
+    setFilters(cleared);
     setError("");
     setLoading(true);
-    setSubmittedFilters(emptyFilters);
+    setSubmittedFilters(cleared);
   }
 
   return <section className="public-events-page" aria-labelledby="events-heading">

@@ -15,7 +15,7 @@ const eventSchema = new Schema({
   organizerId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
   venueId: { type: Schema.Types.ObjectId, ref: "Venue", required: true, index: true },
   title: { type: String, required: true, trim: true, minlength: 2, maxlength: 150 },
-  slug: { type: String, required: true, unique: true, immutable: true, index: true, default: function (this: { title: string }) { return makeSlug(this.title); } },
+  slug: { type: String, required: true, unique: true, sparse: true, immutable: true, index: true, default: function (this: { title: string }) { return makeSlug(this.title); } },
   description: { type: String, trim: true, maxlength: 2_000, default: "" },
   category: { type: String, required: true, trim: true, minlength: 2, maxlength: 60 },
   imageUrl: { type: String, trim: true, maxlength: 2_000, default: "" },

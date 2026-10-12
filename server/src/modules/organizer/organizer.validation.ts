@@ -71,7 +71,8 @@ function validDate(value: unknown, label: string) {
 }
 
 function optionalDate(value: unknown, label: string) {
-  if (value === undefined || value === null || value === "") return undefined;
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
   return validDate(value, label);
 }
 

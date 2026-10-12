@@ -17,6 +17,8 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     details = Object.values(error.errors).map((item) => item.message);
   } else if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
     statusCode = 409; code = "DUPLICATE_RESOURCE"; message = "A record with that value already exists.";
+  } else if (error instanceof URIError) {
+    statusCode = 404; code = "NOT_FOUND"; message = "Resource was not found.";
   }
   if (!env.isProduction && statusCode === 500) console.error(error);
   res.status(statusCode).json({ error: { code, message, ...(details === undefined ? {} : { details }) } });

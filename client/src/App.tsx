@@ -156,7 +156,7 @@ function App() {
   const { pathname, navigate } = usePathname();
   if (isLoading) return <main className="loading-page"><p className="muted">Restoring your session…</p></main>;
   const eventSlug = /^\/events\/([^/]+)$/.exec(pathname)?.[1];
-  if (pathname === "/events" || eventSlug) return <main className="app-page"><PublicNavigation navigate={navigate} />{pathname === "/events" ? <EventCataloguePage navigate={navigate} /> : <PublicEventDetailPage key={eventSlug} slug={eventSlug!} navigate={navigate} user={user} />}</main>;
+  if (pathname === "/events" || eventSlug) return <main className="app-page">{user ? <Navigation user={user} navigate={navigate} logout={logout} /> : <PublicNavigation navigate={navigate} />}{pathname === "/events" ? <EventCataloguePage navigate={navigate} /> : <PublicEventDetailPage key={eventSlug} slug={eventSlug!} navigate={navigate} user={user} />}</main>;
   if (!user) {
     const returnTo = new URLSearchParams(window.location.search).get("returnTo") ?? undefined;
     return <main className="auth-page"><header className="brand"><span className="brand-mark">S</span><span>SeatLock</span></header><AuthScreen navigate={navigate} returnTo={returnTo} /></main>;

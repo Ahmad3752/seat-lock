@@ -30,6 +30,12 @@ test("public event fields reject a reversed sale window", () => {
   assert.throws(() => eventInput({ ...validInput, saleEndsAt: "2027-02-28T00:00:00.000Z" }), (error: unknown) => error instanceof AppError && error.code === "VALIDATION_ERROR");
 });
 
+test("public event fields allow an optional sale window to be cleared", () => {
+  const input = eventInput({ ...validInput, saleStartsAt: "", saleEndsAt: "" }, true);
+  assert.equal(input.saleStartsAt, null);
+  assert.equal(input.saleEndsAt, null);
+});
+
 test("public event fields create a URL-safe slug", () => {
   const event = new Event({
     organizerId: "507f1f77bcf86cd799439012",
