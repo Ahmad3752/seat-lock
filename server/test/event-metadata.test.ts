@@ -26,6 +26,18 @@ test("public event fields accept descriptions and sale windows", () => {
   assert.deepEqual(input.saleEndsAt, new Date(validInput.saleEndsAt));
 });
 
+test("section prices accept whole rupee amounts", () => {
+  const input = eventInput(validInput);
+  assert.deepEqual(input.sectionPrices, [{ section: "A", amount: 2500 }]);
+});
+
+test("section prices reject fractional rupee amounts", () => {
+  assert.throws(
+    () => eventInput({ ...validInput, sectionPrices: [{ section: "A", amount: 2500.5 }] }),
+    (error: unknown) => error instanceof AppError && error.statusCode === 422 && error.code === "VALIDATION_ERROR",
+  );
+});
+
 test("public event fields reject a reversed sale window", () => {
   assert.throws(() => eventInput({ ...validInput, saleEndsAt: "2027-02-28T00:00:00.000Z" }), (error: unknown) => error instanceof AppError && error.code === "VALIDATION_ERROR");
 });

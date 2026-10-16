@@ -83,7 +83,7 @@ function prices(value: unknown): SectionPrice[] {
     const price = item as Record<string, unknown>;
     const section = requiredText(price.section, "Price section", 1, 20).toUpperCase();
     const amount = typeof price.amount === "number" ? price.amount : Number(price.amount);
-    if (!Number.isFinite(amount) || amount < 0 || amount > 10_000_000) throw new AppError(422, "VALIDATION_ERROR", "Each ticket price must be a valid non-negative amount.");
+    if (!Number.isInteger(amount) || amount < 0 || amount > 10_000_000) throw new AppError(422, "VALIDATION_ERROR", "Each ticket price must be a valid non-negative whole-rupee amount.");
     return { section, amount };
   });
   if (new Set(result.map((price) => price.section)).size !== result.length) throw new AppError(422, "VALIDATION_ERROR", "Each section can have only one price.");

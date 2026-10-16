@@ -8,7 +8,7 @@ function makeSlug(title: string) {
 
 const sectionPriceSchema = new Schema({
   section: { type: String, required: true, trim: true, maxlength: 20 },
-  amount: { type: Number, required: true, min: 0 },
+  amount: { type: Number, required: true, min: 0, validate: Number.isInteger },
 }, { _id: false });
 
 const eventSchema = new Schema({
