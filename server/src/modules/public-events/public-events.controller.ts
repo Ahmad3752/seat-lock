@@ -134,6 +134,7 @@ export const getPublicEventSeats: RequestHandler = asyncHandler(async (req, res)
   const seats = await EventSeat.find({ eventId: event._id }).sort({ gridRow: 1, gridColumn: 1 }).lean();
   res.status(200).json({ data: { seats: seats.map((seat) => ({
     id: seat._id.toString(), label: seat.label, section: seat.section, row: seat.row, number: seat.number,
-    x: seat.gridColumn, y: seat.gridRow, type: seat.type || "standard", accessibility: { isAccessible: Boolean(seat.isAccessible) }, price: seat.price, state: seat.status,
+    x: seat.gridColumn, y: seat.gridRow, type: seat.type || "standard", accessibility: { isAccessible: Boolean(seat.isAccessible) }, price: seat.price,
+    state: seat.status === "held" && seat.holdExpiresAt && seat.holdExpiresAt <= new Date() ? "available" : seat.status,
   })) } });
 });

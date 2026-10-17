@@ -1,0 +1,11 @@
+services:
+  mongo:
+    image: mongo:8
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--port", "27018"]
+    ports:
+      - "127.0.0.1:27018:27018"
+    volumes:
+      - seatlock_repl_data:/data/db
+
+volumes:
+  seatlock_repl_data:

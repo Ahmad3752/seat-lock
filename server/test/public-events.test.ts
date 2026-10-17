@@ -146,3 +146,10 @@ test("public seat maps exclude hold, booking, and audit data", async () => {
   assert.deepEqual(seat.accessibility, { isAccessible: true });
   assert.equal("holdTokenHash" in seat || "holdOwnerId" in seat || "bookingId" in seat || "customerId" in seat || "auditTrail" in seat, false);
 });
+
+test("expired holds appear available without exposing hold metadata", async () => {
+  await EventSeat.create({ eventId: publishedId, venueId, seatKey: "A:A:1", section: "A", row: "A", number: 1, label: "A-01", gridRow: 1, gridColumn: 1, price: 2500, status: "held", holdExpiresAt: new Date(Date.now() - 1000), holdTokenHash: "secret" });
+  const response = await request(app).get(`/api/v1/events/${publishedId}/seats`).expect(200);
+  assert.equal(response.body.data.seats[0].state, "available");
+  assert.equal("holdTokenHash" in response.body.data.seats[0], false);
+});

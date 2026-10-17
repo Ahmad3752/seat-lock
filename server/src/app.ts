@@ -7,6 +7,7 @@ import authRouter from "./modules/auth/auth.routes.js";
 import dashboardRouter from "./modules/dashboard/dashboard.routes.js";
 import organizerRouter from "./modules/organizer/organizer.routes.js";
 import publicEventsRouter from "./modules/public-events/public-events.routes.js";
+import holdsRouter, { releaseRouter } from "./modules/holds/holds.routes.js";
 
 export function createApp() {
   const app = express();
@@ -22,6 +23,8 @@ export function createApp() {
   app.use("/api/v1/dashboard", dashboardRouter);
   app.use("/api/v1/organizer", organizerRouter);
   app.use("/api/v1/events", publicEventsRouter);
+  app.use("/api/v1/events", holdsRouter);
+  app.use("/api/v1/holds", releaseRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
