@@ -4,6 +4,7 @@ import { useAuth } from "../auth/useAuth";
 import { ApiError, api } from "../lib/api";
 import { buildEventQuery, MAX_SEAT_SELECTION, toggleSeatSelection, type EventFilters, type PublicSeat } from "./publicEventUtils";
 import { formatHoldCountdown, reconcileSelectedSeats, remainingHoldSeconds } from "./holdUtils";
+import { io } from "socket.io-client";
 
 type Navigate = (to: string) => void;
 type PublicEventCard = { id: string; slug: string; title: string; category: string; posterUrl: string; startsAt: string; priceFrom: number; venue: { name: string; address: string } };
@@ -105,6 +106,7 @@ export function PublicEventDetailPage({ slug, navigate, user }: { slug: string; 
   const [holdNotice, setHoldNotice] = useState("");
   const [pending, setPending] = useState(false);
   const [seatRefresh, setSeatRefresh] = useState(0);
+  const [liveDisconnected, setLiveDisconnected] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const reservationKey = useRef<string | null>(null);
   const requestInFlight = useRef(false);
@@ -127,6 +129,23 @@ export function PublicEventDetailPage({ slug, navigate, user }: { slug: string; 
       .finally(() => { if (active) setHasLoadedSeats(true); });
     return () => { active = false; };
   }, [event, seatRefresh]);
+
+  useEffect(() => {
+    if (!event) return;
+    const socket = io();
+    socket.on("connect", () => {
+      socket.emit("join-event", event.id, (joined: boolean) => {
+        if (joined) { setLiveDisconnected(false); setSeatRefresh((value) => value + 1); }
+        else setLiveDisconnected(true);
+      });
+    });
+    socket.on("seats-changed", (message: { eventId?: string }) => {
+      if (message?.eventId === event.id) setSeatRefresh((value) => value + 1);
+    });
+    socket.on("disconnect", () => setLiveDisconnected(true));
+    socket.on("connect_error", () => setLiveDisconnected(true));
+    return () => { socket.disconnect(); };
+  }, [event]);
 
   useEffect(() => {
     if (!hold) return;
@@ -191,7 +210,7 @@ export function PublicEventDetailPage({ slug, navigate, user }: { slug: string; 
   return <section className="event-detail-page" aria-labelledby="event-title">
     <button type="button" className="text-button back-link" onClick={() => navigate("/events")}>← Back to events</button>
     <section className="event-hero card"><Poster src={event.posterUrl} title={event.title} /><div><p className="eyebrow">{event.category}</p><h1 id="event-title">{event.title}</h1><p className="muted">{event.description}</p><dl className="event-facts"><div><dt>When</dt><dd>{dateTime(event.startsAt)} – {dateTime(event.endsAt)}</dd></div><div><dt>Venue</dt><dd>{event.venue.name}, {event.venue.address}</dd></div><div><dt>Ticket sales</dt><dd>{event.sale.isOpen ? "Open now" : "Not currently open"}{event.sale.endsAt ? ` · ends ${dateTime(event.sale.endsAt)}` : ""}</dd></div><div><dt>Prices</dt><dd>{money(event.pricing.from)} – {money(event.pricing.to)}</dd></div></dl></div></section>
-    <section className="seat-selection-layout"><div className="seat-map-card card"><div className="section-heading"><div><p className="eyebrow">CHOOSE SEATS</p><h2>Seat map</h2></div><p className="seat-count" aria-live="polite">{hold ? hold.seats.length : selectedSeatIds.size} of {MAX_SEAT_SELECTION} selected</p></div><p className="seat-legend" aria-label="Seat state legend"><span className="legend-item legend-available">Available</span><span className="legend-item legend-held">Held</span><span className="legend-item legend-booked">Booked</span><span className="legend-item legend-blocked">Blocked</span></p>{loadingSeats && <p className="muted" aria-live="polite">Loading current seat availability…</p>}{seatError && <p className="form-error" role="alert">{seatError}</p>}{!loadingSeats && !seatError && <SeatMap seats={seats} selectedSeatIds={selectedSeatIds} onToggle={toggleSeat} locked={pending || Boolean(hold)} />}</div>
+    <section className="seat-selection-layout"><div className="seat-map-card card"><div className="section-heading"><div><p className="eyebrow">CHOOSE SEATS</p><h2>Seat map</h2></div><p className="seat-count" aria-live="polite">{hold ? hold.seats.length : selectedSeatIds.size} of {MAX_SEAT_SELECTION} selected</p></div><p className="seat-legend" aria-label="Seat state legend"><span className="legend-item legend-available">Available</span><span className="legend-item legend-held">Held</span><span className="legend-item legend-booked">Booked</span><span className="legend-item legend-blocked">Blocked</span></p>{liveDisconnected && <p className="muted" role="status">Live updates disconnected. Reconnecting…</p>}{loadingSeats && <p className="muted" aria-live="polite">Loading current seat availability…</p>}{seatError && <p className="form-error" role="alert">{seatError}</p>}{!loadingSeats && !seatError && <SeatMap seats={seats} selectedSeatIds={selectedSeatIds} onToggle={toggleSeat} locked={pending || Boolean(hold)} />}</div>
       <aside className="selection-summary card" aria-labelledby="selection-heading"><p className="eyebrow">YOUR SELECTION</p><h2 id="selection-heading">{hold ? "Seats held" : `${selectedSeatIds.size} seat${selectedSeatIds.size === 1 ? "" : "s"} selected`}</h2>{hold ? <><p className="hold-countdown" role="status">Held for {formatHoldCountdown(remainingHoldSeconds(hold.expiresAt, now))}</p><ul>{hold.seats.map((seat) => <li key={seat.id}><span>{seat.label}</span><span>{money(seat.price)}</span></li>)}</ul></> : selectedSeats.length === 0 ? <p className="muted">Select an available seat to see your total.</p> : <ul>{selectedSeats.map((seat) => <li key={seat.id}><span>{seat.label}</span><span>{money(seat.price)}</span><button type="button" className="text-button" disabled={pending} onClick={() => toggleSeat(seat)}>Remove</button></li>)}</ul>}<div className="selection-total"><span>Total</span><strong>{money(hold?.total ?? total)}</strong></div>{hold ? <button type="button" className="secondary" disabled={pending} onClick={() => void releaseHold()}>{pending ? "Releasing…" : "Release hold"}</button> : !user ? <button type="button" onClick={() => navigate(`/login?returnTo=${encodeURIComponent(currentRoute)}`)}>Continue to sign in</button> : user.role !== "customer" ? <p className="muted">Sign in as a customer to reserve seats.</p> : <button type="button" disabled={pending || selectedSeatIds.size === 0 || !event.sale.isOpen} onClick={() => void reserveSeats()}>{pending ? "Reserving…" : "Reserve seats"}</button>}{holdError && <p className="form-error" role="alert">{holdError}</p>}{holdNotice && <p role="status">{holdNotice}</p>}</aside>
     </section>
   </section>;

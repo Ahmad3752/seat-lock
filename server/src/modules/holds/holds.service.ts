@@ -6,6 +6,7 @@ import { Event } from "../../models/event.model.js";
 import { EventSeat } from "../../models/event-seat.model.js";
 import { SeatHold, type SeatHoldDocument } from "../../models/seat-hold.model.js";
 import { holdInput } from "./holds.validation.js";
+import { notifySeatChanges } from "../../realtime/seat-updates.js";
 
 export type PublicHold = {
   id: string;
@@ -61,10 +62,10 @@ export async function createSeatHold(input: CreateHoldInput): Promise<PublicHold
   const session = await mongoose.startSession();
 
   try {
-    return await session.withTransaction(async () => {
+    const result = await session.withTransaction(async () => {
       const now = new Date();
       const existing = await SeatHold.findOne({ customerId, idempotencyKey }).session(session).lean();
-      if (existing) return matchingHold(existing, eventId, seatIds);
+      if (existing) return { hold: matchingHold(existing, eventId, seatIds), changed: false };
       const event = await saleEvent(eventId, now, session);
 
       const holdId = new Types.ObjectId();
@@ -90,8 +91,10 @@ export async function createSeatHold(input: CreateHoldInput): Promise<PublicHold
         snapshots, total: snapshots.reduce((total, seat) => total + seat.price, 0), currency: event.currency,
       });
       await hold.save({ session });
-      return publicHold(hold);
+      return { hold: publicHold(hold), changed: true };
     }, { readConcern: { level: "snapshot" }, writeConcern: { w: "majority" } });
+    if (result.changed) notifySeatChanges(eventId);
+    return result.hold;
   } catch (error) {
     // A concurrent same-key transaction may win the unique-index race on disjoint seats.
     // Read its committed result only after our transaction has rolled back.
@@ -111,15 +114,15 @@ async function finishHold(holdId: string, status: "released" | "expired", custom
   if (!Types.ObjectId.isValid(holdId)) throw new AppError(404, "NOT_FOUND", "Hold was not found.");
   const session = await mongoose.startSession();
   try {
-    return await session.withTransaction(async () => {
+    const eventId = await session.withTransaction(async () => {
       const filter: Record<string, unknown> = { _id: holdId };
       if (customerId) filter.customerId = customerId;
       const hold = await SeatHold.findOne(filter).session(session);
       if (!hold) {
         if (customerId) throw new AppError(404, "NOT_FOUND", "Hold was not found.");
-        return false;
+        return null;
       }
-      if (hold.status !== "active" || (status === "expired" && hold.expiresAt > now)) return false;
+      if (hold.status !== "active" || (status === "expired" && hold.expiresAt > now)) return null;
       await EventSeat.updateMany({ holdId: hold._id, status: "held" }, {
         $set: { status: "available" },
         $unset: { holdId: 1, holdTokenHash: 1, holdExpiresAt: 1 },
@@ -127,8 +130,10 @@ async function finishHold(holdId: string, status: "released" | "expired", custom
       }, { session });
       hold.status = status;
       await hold.save({ session });
-      return true;
+      return hold.eventId.toString();
     });
+    if (eventId) notifySeatChanges(eventId);
+    return Boolean(eventId);
   } finally {
     await session.endSession();
   }

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test, { before } from "node:test";
 import mongoose from "mongoose";
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
+import { io as connect } from "socket.io-client";
 import request from "supertest";
 import { installTestDatabase } from "./helpers/database.js";
 
@@ -41,6 +43,43 @@ async function fixture(eventOverrides: Record<string, unknown> = {}) {
   })));
   return { event, seats, seatIds: seats.map((seat) => seat._id.toString()), url: `/api/v1/events/${event._id}/holds` };
 }
+
+test("only committed hold, release and expiry changes notify event viewers", async () => {
+  const { createRealtimeServer } = await import("../src/realtime/seat-updates.js");
+  const { expireDueSeatHolds } = await import("../src/modules/holds/holds.service.js");
+  const server = createServer();
+  const realtime = createRealtimeServer(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const socket = connect(`http://127.0.0.1:${address.port}`, { transports: ["websocket"] });
+  try {
+    const { event, url, seatIds } = await fixture();
+    await new Promise<void>((resolve) => socket.on("connect", () => resolve()));
+    assert.equal(await socket.timeout(2000).emitWithAck("join-event", event._id.toString()), true);
+    let changes = 0;
+    socket.on("seats-changed", () => { changes++; });
+    const body = { seatIds: [seatIds[0]], idempotencyKey: randomUUID() };
+    const created = await request(app).post(url).set("Authorization", bearer()).send(body).expect(201);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(changes, 1);
+    await request(app).post(url).set("Authorization", bearer()).send(body).expect(201);
+    await request(app).post(url).set("Authorization", bearer()).send({ ...body, idempotencyKey: randomUUID() }).expect(409);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(changes, 1);
+    await request(app).delete(`/api/v1/holds/${created.body.data.hold.id}`).set("Authorization", bearer()).expect(204);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(changes, 2);
+    const second = await request(app).post(url).set("Authorization", bearer()).send({ ...body, idempotencyKey: randomUUID() }).expect(201);
+    await SeatHold.updateOne({ _id: second.body.data.hold.id }, { $set: { expiresAt: new Date(Date.now() - 1000) } });
+    await expireDueSeatHolds();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(changes, 4);
+  } finally {
+    socket.disconnect();
+    await new Promise<void>((resolve) => realtime.close(() => resolve()));
+  }
+});
 
 test("customer hold commits two seats, whole-PKR snapshots, and only public fields", async () => {
   const { url, seatIds } = await fixture();

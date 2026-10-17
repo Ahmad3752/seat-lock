@@ -4,6 +4,8 @@ import { env } from "./config/env.js";
 import { createApp } from "./app.js";
 import { seedDevelopmentDemoUsers } from "./config/demo-users.js";
 import { startHoldExpiryWorker } from "./jobs/hold-expiry-worker.js";
+import { createServer } from "node:http";
+import { createRealtimeServer } from "./realtime/seat-updates.js";
 
 const app = createApp();
 
@@ -12,14 +14,16 @@ async function startServer() {
   await seedDevelopmentDemoUsers();
   const stopHoldExpiryWorker = startHoldExpiryWorker();
 
-  const server = app.listen(env.port, () => {
+  const server = createServer(app);
+  const realtime = createRealtimeServer(server);
+  server.listen(env.port, () => {
     console.log(`SeatLock API running at http://localhost:${env.port}`);
   });
 
   const shutdown = (signal: string) => {
     console.log(`${signal} received. Shutting down gracefully.`);
     stopHoldExpiryWorker();
-    server.close(() => process.exit(0));
+    realtime.close(() => process.exit(0));
   };
 
   process.on("SIGINT", () => shutdown("SIGINT"));

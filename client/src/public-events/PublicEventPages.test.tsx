@@ -1,7 +1,14 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "../lib/api";
 import { PublicEventDetailPage } from "./PublicEventPages";
+
+const socketState = vi.hoisted(() => ({ handlers: new Map<string, (...args: unknown[]) => void>() }));
+vi.mock("socket.io-client", () => ({ io: () => ({
+  on: (name: string, handler: (...args: unknown[]) => void) => { socketState.handlers.set(name, handler); },
+  emit: (_name: string, _eventId: string, callback: (success: boolean) => void) => callback(true),
+  disconnect: () => {},
+}) }));
 
 vi.mock("../auth/useAuth", () => ({ useAuth: () => ({ accessToken: "token" }) }));
 vi.mock("../lib/api", () => ({
@@ -19,6 +26,7 @@ const hold = { id: "hold-1", status: "active", expiresAt: new Date(Date.now() + 
 const mockedApi = vi.mocked(api);
 
 beforeEach(() => {
+  socketState.handlers.clear();
   mockedApi.mockReset();
   mockedApi.mockImplementation(async (path) => {
     if (path.endsWith("/seats")) return { seats: [seat] };
@@ -33,6 +41,22 @@ async function chooseSeat() {
 }
 
 describe("customer seat holds", () => {
+  it("refreshes the seat map on an event notice and after reconnecting", async () => {
+    let state = "available";
+    mockedApi.mockImplementation(async (path) => {
+      if (path === "/events/concert") return { event };
+      if (path.endsWith("/seats")) return { seats: [{ ...seat, state }] };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    render(<PublicEventDetailPage slug="concert" navigate={vi.fn()} user={user} />);
+    await screen.findByRole("button", { name: /A-01, available/ });
+    state = "held";
+    act(() => socketState.handlers.get("seats-changed")?.({ eventId: event.id }));
+    expect(await screen.findByRole("button", { name: /A-01, held/ })).toBeTruthy();
+    state = "available";
+    act(() => socketState.handlers.get("connect")?.());
+    expect(await screen.findByRole("button", { name: /A-01, available/ })).toBeTruthy();
+  });
   it("preserves the idempotency key after a network failure and allows release", async () => {
     let attempt = 0;
     const bodies: string[] = [];
