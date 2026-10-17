@@ -20,7 +20,7 @@ const seatHoldSchema = new Schema({
   tokenHash: { type: String, required: true },
   snapshots: { type: [holdSeatSnapshotSchema], required: true },
   total: { type: Number, required: true, min: 0, validate: Number.isInteger },
-  currency: { type: String, required: true, uppercase: true, trim: true, minlength: 3, maxlength: 3 },
+  currency: { type: String, required: true, uppercase: true, trim: true, enum: ["PKR"] },
 }, { timestamps: true });
 
 seatHoldSchema.index({ customerId: 1, idempotencyKey: 1 }, { unique: true });

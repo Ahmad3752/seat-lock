@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AppError } from "../src/errors/app-error.js";
 import { Event } from "../src/models/event.model.js";
+import { SeatHold } from "../src/models/seat-hold.model.js";
 import { eventInput } from "../src/modules/organizer/organizer.validation.js";
 
 const validInput = {
@@ -36,6 +37,31 @@ test("section prices reject fractional rupee amounts", () => {
     () => eventInput({ ...validInput, sectionPrices: [{ section: "A", amount: 2500.5 }] }),
     (error: unknown) => error instanceof AppError && error.statusCode === 422 && error.code === "VALIDATION_ERROR",
   );
+});
+
+test("event input rejects a non-PKR currency", () => {
+  assert.throws(
+    () => eventInput({ ...validInput, currency: "USD" }),
+    (error: unknown) => error instanceof AppError && error.statusCode === 422 && error.code === "VALIDATION_ERROR",
+  );
+});
+
+test("event and hold models reject a non-PKR currency", async () => {
+  const event = new Event({ ...validInput, organizerId: "507f1f77bcf86cd799439012", currency: "USD" });
+  await assert.rejects(event.validate(), (error: unknown) => error instanceof Error && error.message.includes("currency"));
+
+  const hold = new SeatHold({
+    eventId: "507f1f77bcf86cd799439013",
+    customerId: "507f1f77bcf86cd799439014",
+    seatIds: ["507f1f77bcf86cd799439015"],
+    expiresAt: new Date("2027-04-12T17:00:00.000Z"),
+    idempotencyKey: "0d657255-3de7-4bfe-993f-1bca4512a209",
+    tokenHash: "hash",
+    snapshots: [{ seatId: "507f1f77bcf86cd799439015", label: "A1", price: 2500 }],
+    total: 2500,
+    currency: "USD",
+  });
+  await assert.rejects(hold.validate(), (error: unknown) => error instanceof Error && error.message.includes("currency"));
 });
 
 test("public event fields reject a reversed sale window", () => {

@@ -25,7 +25,7 @@ const eventSchema = new Schema({
   saleStartsAt: { type: Date },
   saleEndsAt: { type: Date },
   status: { type: String, enum: ["draft", "published", "cancelled"], default: "draft", index: true },
-  currency: { type: String, required: true, uppercase: true, trim: true, minlength: 3, maxlength: 3 },
+  currency: { type: String, required: true, uppercase: true, trim: true, enum: ["PKR"] },
   sectionPrices: { type: [sectionPriceSchema], required: true, validate: [(prices: unknown[]) => prices.length > 0, "At least one section price is required."] },
 }, { timestamps: true });
 

@@ -52,7 +52,11 @@ export function eventInput(body: unknown, partial = false) {
   if (!partial || "saleStartsAt" in input) result.saleStartsAt = optionalDate(input.saleStartsAt, "Sale start date");
   if (!partial || "saleEndsAt" in input) result.saleEndsAt = optionalDate(input.saleEndsAt, "Sale end date");
   if (!partial || "timezone" in input) result.timezone = requiredText(input.timezone, "Timezone", 2, 80);
-  if (!partial || "currency" in input) result.currency = requiredText(input.currency, "Currency", 3, 3).toUpperCase();
+  if (!partial || "currency" in input) {
+    const currency = requiredText(input.currency, "Currency", 3, 3).toUpperCase();
+    if (currency !== "PKR") throw new AppError(422, "VALIDATION_ERROR", "Currency must be PKR.");
+    result.currency = currency;
+  }
   if (!partial || "sectionPrices" in input) result.sectionPrices = prices(input.sectionPrices);
   if ("venueId" in input && !partial) {
     if (typeof input.venueId !== "string" || !Types.ObjectId.isValid(input.venueId)) throw new AppError(422, "VALIDATION_ERROR", "Select a valid venue.");
