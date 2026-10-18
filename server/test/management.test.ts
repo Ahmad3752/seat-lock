@@ -94,3 +94,15 @@ test("owners and admins may safely update published event descriptions, but stra
   await request(app).patch(url).set("Authorization", admin.token).send({ currency: "PKR" }).expect(409);
   assert.equal((await Event.findById(event._id))?.title, "Updated Concert");
 });
+
+test("a simultaneous publish cannot undo an admin cancellation", async () => {
+  const admin = await user("admin", "admin");
+  const organizer = await user("organizer", "owner");
+  const venue = await Venue.create({ organizerId: organizer.record._id, name: "Hall", address: "Karachi", seats: [{ seatKey: "A:A:1", section: "A", row: "A", number: 1, label: "A-01", gridRow: 1, gridColumn: 1 }] });
+  for (let i = 0; i < 5; i++) {
+    const event = await Event.create({ organizerId: organizer.record._id, venueId: venue._id, title: `Concert ${i}`, category: "Music", startsAt: new Date(Date.now() + 86400000), endsAt: new Date(Date.now() + 90000000), timezone: "Asia/Karachi", status: "draft", currency: "PKR", sectionPrices: [{ section: "A", amount: 1000 }] });
+    await EventSeat.create({ eventId: event._id, venueId: venue._id, seatKey: "A:A:1", section: "A", row: "A", number: 1, label: "A-01", gridRow: 1, gridColumn: 1, price: 1000 });
+    await Promise.all([request(app).post(`/api/v1/organizer/events/${event.id}/publish`).set("Authorization", organizer.token), request(app).post(`/api/v1/admin/events/${event.id}/cancel`).set("Authorization", admin.token)]);
+    assert.equal((await Event.findById(event._id))?.status, "cancelled");
+  }
+});

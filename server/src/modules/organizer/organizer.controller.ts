@@ -191,7 +191,7 @@ export const publishEvent: RequestHandler = asyncHandler(async (req, res) => {
   priceMap(venue.seats as VenueSeat[], event.sectionPrices as SectionPrice[]);
   const eventSeatCount = await EventSeat.countDocuments({ eventId: event._id });
   if (eventSeatCount !== venue.seats.length) throw new AppError(409, "INVENTORY_INCOMPLETE", "Event seat inventory is incomplete and cannot be published.");
-  event.status = "published";
-  await event.save();
-  res.status(200).json({ data: { event: eventDto(event) } });
+  const published = await Event.findOneAndUpdate({ _id: event._id, status: "draft" }, { $set: { status: "published" } }, { returnDocument: "after" });
+  if (!published) throw new AppError(409, "EVENT_CHANGED", "This event changed while it was being published. Reload and try again.");
+  res.status(200).json({ data: { event: eventDto(published) } });
 });
