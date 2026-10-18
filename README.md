@@ -59,6 +59,10 @@ If you see `ECONNREFUSED`, check that Docker Desktop and the container are runni
 | `DELETE` | `/api/v1/holds/:holdId` | Release the customer's own hold |
 | `POST` | `/api/v1/bookings/checkout` | Confirm a customer hold using the simulated amount (non-production only) |
 | `GET` | `/api/v1/bookings` | List the signed-in customer's demo bookings |
+| `GET` | `/api/v1/organizer/events/:eventId/report` | Event seat counts and confirmed booking details, limited to the owner or an admin |
+| `GET` | `/api/v1/admin/overview` | Admin-only platform users, events, bookings, and simulated totals |
+| `PATCH` | `/api/v1/admin/users/:userId/role` | Admin-only organizer access grant or revocation, recorded in an audit collection |
+| `POST` | `/api/v1/admin/events/:eventId/cancel` | Admin-only event cancellation |
 | `GET` | `/api/health` | API health check |
 
 ## Design notes
@@ -67,10 +71,11 @@ If you see `ECONNREFUSED`, check that Docker Desktop and the container are runni
 - Access tokens are signed JWTs with a short expiry. Refresh tokens are random, hashed before storage, rotated on use, and delivered only in an HttpOnly cookie.
 - The API sends consistent errors: `{ "error": { "code", "message", "details?" } }`.
 - `requireAuth` establishes identity; `requireRole` enforces authorization. `assertOrganizerOwnership` is ready for the venue/event controllers in the next phase, where it will restrict organizers to records with their own `organizerId` (admins may moderate all records).
-- Self-registration deliberately creates only customer accounts. Promote trusted accounts to `organizer` or `admin` directly in the database until the admin user-management UI is built.
+- Self-registration deliberately creates only customer accounts. Admins can grant or revoke organizer access using the platform dashboard; admin accounts cannot be assigned there. Role changes are recorded and management permissions are checked against the current database role. A changed user should sign in again.
 - In development only, the server creates demo accounts at startup: usernames `organizer` and `admin`, both using password `12345678`. The sign-in screen exposes buttons for them. These accounts are disabled in production.
 - Creating an event copies every venue seat into its own `EventSeat` document. A unique `eventId + seatKey` index keeps one independent inventory record per seat per event, ready for holding and booking in Part 5.
 - Selecting seats is browser-only until the customer clicks Reserve seats. A MongoDB transaction then holds the full selection for ten minutes or holds none. Expired holds are released automatically. Holds are not bookings or payments, and refreshing the page does not restore a hold summary.
 - Ticket prices are non-negative whole Pakistani rupees; `2500` means Rs 2,500.
 - Event pages use Socket.IO rooms for live seat-map updates after committed holds, releases, expiry, and bookings. Reconnecting clients rejoin and reload the authoritative seat map; Socket.IO never replaces the database's concurrency checks. The built-in broadcaster is intended for one API process; multiple API instances need a shared Socket.IO adapter.
 - Demo checkout asks the customer to type the exact hold total. It creates a confirmed **simulated** booking and a ticket reference, but does not process or verify money; it is disabled when `NODE_ENV=production`. Booking history is customer-owned. Ticket references are not secure admission credentials. Real payments, verified webhooks, refunds, and a QR admission system require a future integration.
+- Organizer reports show confirmed bookings and live seat counts. Reported sales are simulated. Cancelling an event prevents new holds and checkout and preserves existing booking records; it does not issue refunds or notify attendees. Cancelled events cannot be republished. Owners and admins can edit published event descriptions and other public information, but not pricing or scheduling after publishing.

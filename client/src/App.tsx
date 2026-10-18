@@ -5,6 +5,8 @@ import { ApiError } from "./lib/api";
 import { EventFormPage, EventListPage, VenueFormPage, VenueListPage } from "./organizer/OrganizerPages";
 import { EventCataloguePage, PublicEventDetailPage } from "./public-events/PublicEventPages";
 import { BookingHistory } from "./bookings/BookingHistory";
+import { EventReport } from "./organizer/EventReport";
+import { AdminPage } from "./admin/AdminPage";
 import "./App.css";
 
 type Mode = "login" | "register";
@@ -44,6 +46,7 @@ function Navigation({ user, navigate, logout }: { user: AuthUser; navigate: (to:
     <nav aria-label="Main navigation">
       <RouteLink to="/events" navigate={navigate}>Events</RouteLink>
       {(user.role === "customer" || user.role === "organizer") && <RouteLink to="/dashboard" navigate={navigate}>Dashboard</RouteLink>}
+      {user.role === "organizer" && <RouteLink to="/my-bookings" navigate={navigate}>My bookings</RouteLink>}
       {user.role === "organizer" && <RouteLink to="/organizer" navigate={navigate}>Organizer</RouteLink>}
       {user.role === "admin" && <RouteLink to="/admin" navigate={navigate}>Admin</RouteLink>}
       <span className="role" title={`Signed in as ${user.email}`}>{user.role}</span>
@@ -123,24 +126,10 @@ function AccessDenied({ user, navigate }: { user: AuthUser; navigate: (to: strin
   return <section className="card dashboard-card"><p className="eyebrow">RESTRICTED</p><h1>This page is not available to your role.</h1><p className="muted">You are signed in as a {user.role}. Use your dashboard to continue.</p><button type="button" onClick={() => navigate(defaultPath(user.role))}>Go to my dashboard</button></section>;
 }
 
-function CustomerDashboard({ user }: { user: AuthUser }) {
-  return <DashboardShell eyebrow="CUSTOMER DASHBOARD" title={`Welcome, ${user.name}.`} description="Keep track of your bookings and any seats you are currently holding.">
-    <DashboardCard title="My bookings" text="Confirmed tickets will appear here after payment is added in Part 7." action="Browse events" />
-    <DashboardCard title="Active seat holds" text="Your 10-minute seat holds will appear here in Part 5." action="No active holds" mutedAction />
-  </DashboardShell>;
-}
-
 function OrganizerDashboard({ user, navigate }: { user: AuthUser; navigate: (to: string) => void }) {
   return <DashboardShell eyebrow="ORGANIZER DASHBOARD" title={`Manage your events, ${user.name}.`} description="This workspace is limited to venues and events that you own.">
     <DashboardCard title="My events" text="Create draft events, set prices, and publish when ready." action="Manage events" onAction={() => navigate("/organizer/events")} />
     <DashboardCard title="Venues" text="Build reusable venues and grid-based seating plans." action="Manage venues" onAction={() => navigate("/organizer/venues")} />
-  </DashboardShell>;
-}
-
-function AdminDashboard({ user }: { user: AuthUser }) {
-  return <DashboardShell eyebrow="ADMIN DASHBOARD" title={`Platform overview, ${user.name}.`} description="Platform-level controls are separated from organizer-owned work.">
-    <DashboardCard title="Manage users" text="Review accounts and role assignments as administration features grow." action="User management" />
-    <DashboardCard title="Manage events" text="Moderate events across all organizers when event management is added." action="Event moderation" />
   </DashboardShell>;
 }
 
@@ -165,15 +154,17 @@ function App() {
 
   let content;
   if (pathname === "/") content = <section className="card dashboard-card"><p className="eyebrow">SIGNED IN</p><h1>Welcome, {user.name}.</h1><p className="muted">Your {user.role} account is ready.</p><button type="button" onClick={() => navigate(defaultPath(user.role))}>Open my dashboard</button></section>;
-  else if (pathname === "/dashboard") content = user.role === "customer" ? <BookingHistory navigate={navigate} /> : user.role === "organizer" ? <CustomerDashboard user={user} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (pathname === "/dashboard") content = user.role === "customer" || user.role === "organizer" ? <BookingHistory navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (pathname === "/my-bookings") content = user.role === "customer" || user.role === "organizer" ? <BookingHistory navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (pathname === "/organizer/venues") content = user.role === "organizer" || user.role === "admin" ? <VenueListPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (pathname === "/organizer/venues/new") content = user.role === "organizer" || user.role === "admin" ? <VenueFormPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (/^\/organizer\/venues\/[^/]+\/edit$/.test(pathname)) content = user.role === "organizer" || user.role === "admin" ? <VenueFormPage navigate={navigate} venueId={pathname.split("/")[3]} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (pathname === "/organizer/events") content = user.role === "organizer" || user.role === "admin" ? <EventListPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (pathname === "/organizer/events/new") content = user.role === "organizer" || user.role === "admin" ? <EventFormPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (/^\/organizer\/events\/[^/]+\/report$/.test(pathname)) content = user.role === "organizer" || user.role === "admin" ? <EventReport navigate={navigate} eventId={pathname.split("/")[3]!} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (/^\/organizer\/events\/[^/]+\/edit$/.test(pathname)) content = user.role === "organizer" || user.role === "admin" ? <EventFormPage navigate={navigate} eventId={pathname.split("/")[3]} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (pathname === "/organizer") content = user.role === "organizer" || user.role === "admin" ? <OrganizerDashboard user={user} navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
-  else if (pathname === "/admin") content = user.role === "admin" ? <AdminDashboard user={user} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (pathname === "/admin") content = user.role === "admin" ? <AdminPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
   else content = <AccessDenied user={user} navigate={navigate} />;
   return <main className="app-page"><Navigation user={user} navigate={navigate} logout={logout} />{content}</main>;
 }
