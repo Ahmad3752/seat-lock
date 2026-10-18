@@ -106,8 +106,8 @@ test("only committed hold, release and expiry changes notify event viewers", asy
   assert.ok(address && typeof address !== "string");
   const socket = connect(`http://127.0.0.1:${address.port}`, { transports: ["websocket"] });
   try {
-    const { event, url, seatIds } = await fixture();
     await new Promise<void>((resolve) => socket.on("connect", () => resolve()));
+    const { event, url, seatIds } = await fixture();
     assert.equal(await socket.timeout(2000).emitWithAck("join-event", event._id.toString()), true);
     let changes = 0;
     socket.on("seats-changed", () => { changes++; });
@@ -180,13 +180,22 @@ for (const [name, makeBody] of [
   });
 }
 
-test("hold creation requires a customer", async () => {
+test("hold creation requires a customer or organizer", async () => {
   const { url, seatIds } = await fixture();
   const body = { seatIds, idempotencyKey: randomUUID() };
   await request(app).post(url).send(body).expect(401);
-  for (const role of ["organizer", "admin"] as const) {
+  for (const role of ["admin"] as const) {
     await request(app).post(url).set("Authorization", bearer(customerId, role)).send(body).expect(403);
   }
+});
+
+test("organizers can reserve and book seats as customers", async () => {
+  const { url, seatIds } = await fixture();
+  const token = bearer(customerId, "organizer");
+  const held = await request(app).post(url).set("Authorization", token).send({ seatIds: [seatIds[0]], idempotencyKey: randomUUID() }).expect(201);
+  await request(app).post("/api/v1/bookings/checkout").set("Authorization", token).send({ holdId: held.body.data.hold.id, amount: 2500 }).expect(200);
+  const history = await request(app).get("/api/v1/bookings").set("Authorization", token).expect(200);
+  assert.equal(history.body.data.bookings.length, 1);
 });
 
 for (const [name, overrides] of [

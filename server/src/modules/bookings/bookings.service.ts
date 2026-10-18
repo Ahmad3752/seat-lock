@@ -22,7 +22,8 @@ export async function checkoutDemo(customerId: string, holdId: unknown, amount: 
       if (existing) return { booking: existing, changed: false };
       const now = new Date();
       if (hold.status !== "active" || hold.expiresAt <= now) throw new AppError(409, "HOLD_EXPIRED", "Your hold is no longer active. Select seats again.");
-      const event = await Event.findOne({ _id: hold.eventId, status: "published", startsAt: { $gt: now } }).session(session).lean();
+      // Write the event in the transaction so cancellation conflicts with checkout.
+      const event = await Event.findOneAndUpdate({ _id: hold.eventId, status: "published", startsAt: { $gt: now } }, { $inc: { __v: 1 } }, { session, returnDocument: "after" }).lean();
       if (!event) throw new AppError(409, "EVENT_UNAVAILABLE", "This event is no longer available.");
       const seats = await EventSeat.updateMany({ _id: { $in: hold.seatIds }, eventId: hold.eventId, status: "held", holdId: hold._id, holdExpiresAt: { $gt: now } }, {
         $set: { status: "booked" }, $unset: { holdId: 1, holdTokenHash: 1, holdExpiresAt: 1 }, $inc: { version: 1 },

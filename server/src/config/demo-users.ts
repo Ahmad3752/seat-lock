@@ -22,7 +22,7 @@ export async function seedDevelopmentDemoUsers() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
   await Promise.all(demoUsers.map((user) => User.updateOne(
     { email: user.email },
-    { $set: { name: user.name, role: user.role, passwordHash } },
+    { $setOnInsert: { name: user.name, role: user.role, passwordHash } },
     { upsert: true, runValidators: true },
   )));
   console.log("Development demo accounts are ready: organizer / admin (password: 12345678).");

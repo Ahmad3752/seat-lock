@@ -176,6 +176,7 @@ export const publishEvent: RequestHandler = asyncHandler(async (req, res) => {
   if (!event) throw new AppError(404, "NOT_FOUND", "Event was not found.");
   assertOrganizerOwnership(event.organizerId, req.user!);
   if (event.status === "published") return res.status(200).json({ data: { event: eventDto(event) } });
+  if (event.status === "cancelled") throw new AppError(409, "EVENT_CANCELLED", "Cancelled events cannot be republished.");
   const venue = await Venue.findById(event.venueId);
   if (!venue) throw new AppError(409, "VENUE_UNAVAILABLE", "The event venue is no longer available.");
   ensureChronological(event.startsAt, event.endsAt);

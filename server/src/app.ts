@@ -9,6 +9,7 @@ import organizerRouter from "./modules/organizer/organizer.routes.js";
 import publicEventsRouter from "./modules/public-events/public-events.routes.js";
 import holdsRouter, { releaseRouter } from "./modules/holds/holds.routes.js";
 import bookingsRouter from "./modules/bookings/bookings.routes.js";
+import adminRouter from "./modules/admin/admin.routes.js";
 
 export function createApp() {
   const app = express();
@@ -27,6 +28,7 @@ export function createApp() {
   app.use("/api/v1/events", holdsRouter);
   app.use("/api/v1/holds", releaseRouter);
   app.use("/api/v1/bookings", bookingsRouter);
+  app.use("/api/v1/admin", adminRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

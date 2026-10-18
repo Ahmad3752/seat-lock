@@ -33,13 +33,13 @@ function unavailable() {
 }
 
 async function saleEvent(eventId: string, now: Date, session: ClientSession | null = null) {
-  const event = await Event.findOne({
+  const event = await Event.findOneAndUpdate({
     _id: eventId, status: "published", startsAt: { $gt: now },
     $and: [
       { $or: [{ saleStartsAt: null }, { saleStartsAt: { $lte: now } }] },
       { $or: [{ saleEndsAt: null }, { saleEndsAt: { $gt: now } }] },
     ],
-  }).session(session).select("currency").lean();
+  }, { $inc: { __v: 1 } }, { session, returnDocument: "after" }).select("currency").lean();
   if (!event) throw new AppError(404, "NOT_FOUND", "Event was not found.");
   return event;
 }
