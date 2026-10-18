@@ -41,6 +41,21 @@ async function chooseSeat() {
 }
 
 describe("customer seat holds", () => {
+  it("confirms a held seat with the exact demo amount and displays its ticket reference", async () => {
+    mockedApi.mockImplementation(async (path) => {
+      if (path === "/events/concert") return { event };
+      if (path.endsWith("/seats")) return { seats: [seat] };
+      if (path === "/events/event/holds") return { hold };
+      if (path === "/bookings/checkout") return { booking: { reference: "SL-TEST", paymentStatus: "simulated" } };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    await chooseSeat();
+    fireEvent.click(screen.getByRole("button", { name: "Reserve seats" }));
+    await screen.findByText("Seats held");
+    fireEvent.change(screen.getByLabelText(/enter the exact amount/i), { target: { value: "2500" } });
+    fireEvent.click(screen.getByRole("button", { name: /confirm demo booking/i }));
+    expect(await screen.findByText(/SL-TEST/)).toBeTruthy();
+  });
   it("refreshes the seat map on an event notice and after reconnecting", async () => {
     let state = "available";
     mockedApi.mockImplementation(async (path) => {

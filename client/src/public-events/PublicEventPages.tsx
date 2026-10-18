@@ -92,6 +92,23 @@ function SeatMap({ seats, selectedSeatIds, onToggle, locked }: { seats: PublicSe
   })}</div>;
 }
 
+function DemoCheckout({ hold, accessToken, onBooked }: { hold: SeatHold; accessToken: string; onBooked: (reference: string) => void }) {
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submitting) return;
+    setSubmitting(true); setError("");
+    try {
+      const result = await api<{ booking: { reference: string } }>("/bookings/checkout", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ holdId: hold.id, amount: Number(amount) }) });
+      onBooked(result.booking.reference);
+    } catch (caught) { setError(readableError(caught, "Unable to confirm this demo booking. Retry safely.")); }
+    finally { setSubmitting(false); }
+  }
+  return <form className="card dashboard-card" onSubmit={(event) => void submit(event)}><h2>Demo checkout</h2><p>This is a simulation. No real payment is taken.</p><label>Enter the exact amount in rupees<input type="number" min="0" step="1" required value={amount} onChange={(event) => setAmount(event.target.value)} /></label>{error && <p className="form-error" role="alert">{error}</p>}<button type="submit" disabled={submitting}>{submitting ? "Confirming…" : "Confirm demo booking"}</button></form>;
+}
+
 export function PublicEventDetailPage({ slug, navigate, user }: { slug: string; navigate: Navigate; user: AuthUser | null }) {
   const { accessToken } = useAuth();
   const [event, setEvent] = useState<PublicEventDetail | null>(null);
@@ -104,6 +121,7 @@ export function PublicEventDetailPage({ slug, navigate, user }: { slug: string; 
   const [hold, setHold] = useState<SeatHold | null>(null);
   const [holdError, setHoldError] = useState("");
   const [holdNotice, setHoldNotice] = useState("");
+  const [bookingReference, setBookingReference] = useState("");
   const [pending, setPending] = useState(false);
   const [seatRefresh, setSeatRefresh] = useState(0);
   const [liveDisconnected, setLiveDisconnected] = useState(false);
@@ -212,6 +230,8 @@ export function PublicEventDetailPage({ slug, navigate, user }: { slug: string; 
     <section className="event-hero card"><Poster src={event.posterUrl} title={event.title} /><div><p className="eyebrow">{event.category}</p><h1 id="event-title">{event.title}</h1><p className="muted">{event.description}</p><dl className="event-facts"><div><dt>When</dt><dd>{dateTime(event.startsAt)} – {dateTime(event.endsAt)}</dd></div><div><dt>Venue</dt><dd>{event.venue.name}, {event.venue.address}</dd></div><div><dt>Ticket sales</dt><dd>{event.sale.isOpen ? "Open now" : "Not currently open"}{event.sale.endsAt ? ` · ends ${dateTime(event.sale.endsAt)}` : ""}</dd></div><div><dt>Prices</dt><dd>{money(event.pricing.from)} – {money(event.pricing.to)}</dd></div></dl></div></section>
     <section className="seat-selection-layout"><div className="seat-map-card card"><div className="section-heading"><div><p className="eyebrow">CHOOSE SEATS</p><h2>Seat map</h2></div><p className="seat-count" aria-live="polite">{hold ? hold.seats.length : selectedSeatIds.size} of {MAX_SEAT_SELECTION} selected</p></div><p className="seat-legend" aria-label="Seat state legend"><span className="legend-item legend-available">Available</span><span className="legend-item legend-held">Held</span><span className="legend-item legend-booked">Booked</span><span className="legend-item legend-blocked">Blocked</span></p>{liveDisconnected && <p className="muted" role="status">Live updates disconnected. Reconnecting…</p>}{loadingSeats && <p className="muted" aria-live="polite">Loading current seat availability…</p>}{seatError && <p className="form-error" role="alert">{seatError}</p>}{!loadingSeats && !seatError && <SeatMap seats={seats} selectedSeatIds={selectedSeatIds} onToggle={toggleSeat} locked={pending || Boolean(hold)} />}</div>
       <aside className="selection-summary card" aria-labelledby="selection-heading"><p className="eyebrow">YOUR SELECTION</p><h2 id="selection-heading">{hold ? "Seats held" : `${selectedSeatIds.size} seat${selectedSeatIds.size === 1 ? "" : "s"} selected`}</h2>{hold ? <><p className="hold-countdown" role="status">Held for {formatHoldCountdown(remainingHoldSeconds(hold.expiresAt, now))}</p><ul>{hold.seats.map((seat) => <li key={seat.id}><span>{seat.label}</span><span>{money(seat.price)}</span></li>)}</ul></> : selectedSeats.length === 0 ? <p className="muted">Select an available seat to see your total.</p> : <ul>{selectedSeats.map((seat) => <li key={seat.id}><span>{seat.label}</span><span>{money(seat.price)}</span><button type="button" className="text-button" disabled={pending} onClick={() => toggleSeat(seat)}>Remove</button></li>)}</ul>}<div className="selection-total"><span>Total</span><strong>{money(hold?.total ?? total)}</strong></div>{hold ? <button type="button" className="secondary" disabled={pending} onClick={() => void releaseHold()}>{pending ? "Releasing…" : "Release hold"}</button> : !user ? <button type="button" onClick={() => navigate(`/login?returnTo=${encodeURIComponent(currentRoute)}`)}>Continue to sign in</button> : user.role !== "customer" ? <p className="muted">Sign in as a customer to reserve seats.</p> : <button type="button" disabled={pending || selectedSeatIds.size === 0 || !event.sale.isOpen} onClick={() => void reserveSeats()}>{pending ? "Reserving…" : "Reserve seats"}</button>}{holdError && <p className="form-error" role="alert">{holdError}</p>}{holdNotice && <p role="status">{holdNotice}</p>}</aside>
+      {hold && accessToken && <DemoCheckout hold={hold} accessToken={accessToken} onBooked={(reference) => { setHold(null); setSelectedSeatIds(new Set()); setSeatRefresh((value) => value + 1); setBookingReference(reference); }} />}
+      {bookingReference && <section className="card dashboard-card" role="status"><h2>Demo booking confirmed</h2><p>No real payment was taken. Ticket reference: {bookingReference}</p><button type="button" onClick={() => navigate("/dashboard")}>View my bookings</button></section>}
     </section>
   </section>;
 }

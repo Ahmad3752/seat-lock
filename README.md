@@ -57,6 +57,8 @@ If you see `ECONNREFUSED`, check that Docker Desktop and the container are runni
 | `GET` | `/api/v1/events/:eventId/seats` | Read the current public seat map for one upcoming published event |
 | `POST` | `/api/v1/events/:eventId/holds` | Atomically hold selected seats for an authenticated customer |
 | `DELETE` | `/api/v1/holds/:holdId` | Release the customer's own hold |
+| `POST` | `/api/v1/bookings/checkout` | Confirm a customer hold using the simulated amount (non-production only) |
+| `GET` | `/api/v1/bookings` | List the signed-in customer's demo bookings |
 | `GET` | `/api/health` | API health check |
 
 ## Design notes
@@ -70,4 +72,5 @@ If you see `ECONNREFUSED`, check that Docker Desktop and the container are runni
 - Creating an event copies every venue seat into its own `EventSeat` document. A unique `eventId + seatKey` index keeps one independent inventory record per seat per event, ready for holding and booking in Part 5.
 - Selecting seats is browser-only until the customer clicks Reserve seats. A MongoDB transaction then holds the full selection for ten minutes or holds none. Expired holds are released automatically. Holds are not bookings or payments, and refreshing the page does not restore a hold summary.
 - Ticket prices are non-negative whole Pakistani rupees; `2500` means Rs 2,500.
-- Event pages use Socket.IO rooms for live seat-map updates after committed holds, releases, and expiry. Reconnecting clients rejoin and reload the authoritative seat map; Socket.IO never replaces the database's concurrency checks. Booking is not yet implemented. The built-in broadcaster is intended for one API process; multiple API instances need a shared Socket.IO adapter.
+- Event pages use Socket.IO rooms for live seat-map updates after committed holds, releases, expiry, and bookings. Reconnecting clients rejoin and reload the authoritative seat map; Socket.IO never replaces the database's concurrency checks. The built-in broadcaster is intended for one API process; multiple API instances need a shared Socket.IO adapter.
+- Demo checkout asks the customer to type the exact hold total. It creates a confirmed **simulated** booking and a ticket reference, but does not process or verify money; it is disabled when `NODE_ENV=production`. Booking history is customer-owned. Ticket references are not secure admission credentials. Real payments, verified webhooks, refunds, and a QR admission system require a future integration.

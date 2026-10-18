@@ -4,6 +4,7 @@ import type { AuthUser, UserRole } from "./auth/auth-context";
 import { ApiError } from "./lib/api";
 import { EventFormPage, EventListPage, VenueFormPage, VenueListPage } from "./organizer/OrganizerPages";
 import { EventCataloguePage, PublicEventDetailPage } from "./public-events/PublicEventPages";
+import { BookingHistory } from "./bookings/BookingHistory";
 import "./App.css";
 
 type Mode = "login" | "register";
@@ -164,7 +165,7 @@ function App() {
 
   let content;
   if (pathname === "/") content = <section className="card dashboard-card"><p className="eyebrow">SIGNED IN</p><h1>Welcome, {user.name}.</h1><p className="muted">Your {user.role} account is ready.</p><button type="button" onClick={() => navigate(defaultPath(user.role))}>Open my dashboard</button></section>;
-  else if (pathname === "/dashboard") content = user.role === "customer" || user.role === "organizer" ? <CustomerDashboard user={user} /> : <AccessDenied user={user} navigate={navigate} />;
+  else if (pathname === "/dashboard") content = user.role === "customer" ? <BookingHistory navigate={navigate} /> : user.role === "organizer" ? <CustomerDashboard user={user} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (pathname === "/organizer/venues") content = user.role === "organizer" || user.role === "admin" ? <VenueListPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (pathname === "/organizer/venues/new") content = user.role === "organizer" || user.role === "admin" ? <VenueFormPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (/^\/organizer\/venues\/[^/]+\/edit$/.test(pathname)) content = user.role === "organizer" || user.role === "admin" ? <VenueFormPage navigate={navigate} venueId={pathname.split("/")[3]} /> : <AccessDenied user={user} navigate={navigate} />;

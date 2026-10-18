@@ -18,6 +18,7 @@ const [{ createApp }, { Event }, { EventSeat }, { SeatHold }, { createAccessToke
   import("../src/utils/tokens.js"),
 ]);
 const app = createApp();
+const { Booking } = await import("../src/models/booking.model.js");
 const customerId = new mongoose.Types.ObjectId().toString();
 const bearer = (id = customerId, role: "customer" | "organizer" | "admin" = "customer") =>
   `Bearer ${createAccessToken({ sub: id, role })}`;
@@ -26,7 +27,7 @@ installTestDatabase();
 
 before(async () => {
   await mongoose.connection.collection("transaction_smoke").createIndex({ marker: 1 }, { unique: true });
-  await Promise.all([Event.init(), EventSeat.init(), SeatHold.init()]);
+  await Promise.all([Event.init(), EventSeat.init(), SeatHold.init(), Booking.init()]);
 });
 
 async function fixture(eventOverrides: Record<string, unknown> = {}) {
@@ -43,6 +44,57 @@ async function fixture(eventOverrides: Record<string, unknown> = {}) {
   })));
   return { event, seats, seatIds: seats.map((seat) => seat._id.toString()), url: `/api/v1/events/${event._id}/holds` };
 }
+
+test("demo checkout books held seats atomically and returns the same booking on retry", async () => {
+  const { url, seatIds } = await fixture();
+  const held = await request(app).post(url).set("Authorization", bearer()).send({ seatIds, idempotencyKey: randomUUID() }).expect(201);
+  const holdId = held.body.data.hold.id;
+  const checkout = () => request(app).post(`/api/v1/bookings/checkout`).set("Authorization", bearer()).send({ holdId, amount: 4301 });
+  const [first, second] = await Promise.all([checkout(), checkout()]);
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.equal(first.body.data.booking.reference, second.body.data.booking.reference);
+  assert.equal(first.body.data.booking.paymentStatus, "simulated");
+  assert.equal(await EventSeat.countDocuments({ _id: { $in: seatIds }, status: "booked" }), 2);
+  assert.equal((await SeatHold.findById(holdId).lean())?.status, "converted");
+  const history = await request(app).get("/api/v1/bookings").set("Authorization", bearer()).expect(200);
+  assert.equal(history.body.data.bookings.length, 1);
+  const other = await request(app).get("/api/v1/bookings").set("Authorization", bearer(new mongoose.Types.ObjectId().toString())).expect(200);
+  assert.equal(other.body.data.bookings.length, 0);
+});
+
+test("demo checkout rejects wrong amounts, foreign holds and expired holds", async () => {
+  const { url, seatIds } = await fixture();
+  const held = await request(app).post(url).set("Authorization", bearer()).send({ seatIds, idempotencyKey: randomUUID() }).expect(201);
+  const holdId = held.body.data.hold.id;
+  await request(app).post("/api/v1/bookings/checkout").set("Authorization", bearer()).send({ holdId, amount: 1 }).expect(400);
+  await request(app).post("/api/v1/bookings/checkout").set("Authorization", bearer(new mongoose.Types.ObjectId().toString())).send({ holdId, amount: 4301 }).expect(404);
+  await SeatHold.updateOne({ _id: holdId }, { $set: { expiresAt: new Date(Date.now() - 1000) } });
+  await request(app).post("/api/v1/bookings/checkout").set("Authorization", bearer()).send({ holdId, amount: 4301 }).expect(409);
+  assert.equal(await EventSeat.countDocuments({ status: "booked" }), 0);
+});
+
+test("simultaneous release and checkout cannot leave a booking for available seats", async () => {
+  const { url, seatIds } = await fixture();
+  const held = await request(app).post(url).set("Authorization", bearer()).send({ seatIds, idempotencyKey: randomUUID() }).expect(201);
+  const holdId = held.body.data.hold.id;
+  await Promise.all([
+    request(app).post("/api/v1/bookings/checkout").set("Authorization", bearer()).send({ holdId, amount: 4301 }),
+    request(app).delete(`/api/v1/holds/${holdId}`).set("Authorization", bearer()),
+  ]);
+  const booking = await Booking.findOne({ holdId }).lean();
+  const seats = await EventSeat.find({ _id: { $in: seatIds } }).lean();
+  assert.ok(seats.every((seat) => seat.status === (booking ? "booked" : "available")));
+});
+
+test("demo checkout is disabled in production", async () => {
+  const { env } = await import("../src/config/env.js");
+  const previous = env.isProduction;
+  env.isProduction = true;
+  try {
+    await request(app).post("/api/v1/bookings/checkout").set("Authorization", bearer()).send({ holdId: new mongoose.Types.ObjectId().toString(), amount: 1 }).expect(403);
+  } finally { env.isProduction = previous; }
+});
 
 test("only committed hold, release and expiry changes notify event viewers", async () => {
   const { createRealtimeServer } = await import("../src/realtime/seat-updates.js");
@@ -75,6 +127,10 @@ test("only committed hold, release and expiry changes notify event viewers", asy
     await expireDueSeatHolds();
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.equal(changes, 4);
+    const third = await request(app).post(url).set("Authorization", bearer()).send({ ...body, idempotencyKey: randomUUID() }).expect(201);
+    await request(app).post("/api/v1/bookings/checkout").set("Authorization", bearer()).send({ holdId: third.body.data.hold.id, amount: 2500 }).expect(200);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(changes, 6);
   } finally {
     socket.disconnect();
     await new Promise<void>((resolve) => realtime.close(() => resolve()));
