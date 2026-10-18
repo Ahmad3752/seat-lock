@@ -81,3 +81,16 @@ test("development demo seeding does not undo an administrator's organizer revoca
   await seedDevelopmentDemoUsers();
   assert.equal((await User.findOne({ email: "organizer@seatlock.demo" }))?.role, "customer");
 });
+
+test("owners and admins may safely update published event descriptions, but strangers cannot", async () => {
+  const admin = await user("admin", "admin");
+  const organizer = await user("organizer", "owner");
+  const other = await user("organizer", "other");
+  const event = await Event.create({ organizerId: organizer.record._id, venueId: new mongoose.Types.ObjectId(), title: "Concert", category: "Music", startsAt: new Date(Date.now() + 86400000), endsAt: new Date(Date.now() + 90000000), timezone: "Asia/Karachi", status: "published", currency: "PKR", sectionPrices: [{ section: "A", amount: 1000 }] });
+  const url = `/api/v1/organizer/events/${event.id}`;
+  await request(app).patch(url).set("Authorization", other.token).send({ title: "Intruder" }).expect(403);
+  await request(app).patch(url).set("Authorization", organizer.token).send({ title: "Updated Concert" }).expect(200);
+  await request(app).patch(url).set("Authorization", admin.token).send({ description: "Updated description" }).expect(200);
+  await request(app).patch(url).set("Authorization", admin.token).send({ currency: "PKR" }).expect(409);
+  assert.equal((await Event.findById(event._id))?.title, "Updated Concert");
+});

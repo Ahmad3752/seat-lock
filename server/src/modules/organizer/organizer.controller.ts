@@ -152,7 +152,15 @@ export const updateEvent: RequestHandler = asyncHandler(async (req, res) => {
   const event = await Event.findById(objectId(req.params.eventId, "Event"));
   if (!event) throw new AppError(404, "NOT_FOUND", "Event was not found.");
   assertOrganizerOwnership(event.organizerId, req.user!);
-  if (event.status !== "draft") throw new AppError(409, "EVENT_PUBLISHED", "Published events cannot be edited.");
+  if (event.status === "cancelled") throw new AppError(409, "EVENT_CANCELLED", "Cancelled events cannot be edited.");
+  if (event.status === "published") {
+    const allowed = new Set(["title", "description", "category", "imageUrl"]);
+    if (typeof req.body !== "object" || req.body === null || Object.keys(req.body).some((key) => !allowed.has(key))) throw new AppError(409, "EVENT_PUBLISHED", "Only event information can be changed after publishing.");
+    Object.assign(event, eventInput(req.body, true));
+    await event.save();
+    res.status(200).json({ data: { event: eventDto(event) } });
+    return;
+  }
   const updates = eventInput(req.body, true);
   const startsAt = (updates.startsAt as Date | undefined) ?? event.startsAt;
   const endsAt = (updates.endsAt as Date | undefined) ?? event.endsAt;
