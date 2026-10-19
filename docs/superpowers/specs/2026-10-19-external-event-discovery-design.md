@@ -1,0 +1,23 @@
+# External event discovery design
+
+## Goal
+
+Show upcoming external events alongside SeatLock events in the existing public catalogue. Customers can inspect the available details and follow a clearly identified link to the original provider. External listings never enter SeatLock's seat-hold or booking flow. Instagram is excluded. Ticketwala, Bookme, AllEvents, Shapargullay and the Media Sniffers article are candidate sources; adapters are enabled only after access and extraction permissions are verified.
+
+## Storage and ingestion
+
+Use a separate `external_events` MongoDB collection in the database configured by `MONGODB_URI`. Existing events require an organizer, venue, prices and seat inventory and are unsuitable for incomplete third-party listings. A Python CLI under `scraper/` uses requests and BeautifulSoup, falling back to Playwright only where necessary and permitted. It provides `--source` and `--all`, configurable timeouts, identifiable user agent, conservative throttling, limited retry with backoff, and per-source failure isolation. Do not bypass access controls. Check robots rules, terms and content/image permissions; report an unverified or inaccessible source rather than fabricating a working adapter. Manual execution is the initial scheduling mechanism.
+
+Records include title, normalized category, start/end timestamps, timezone, city, venue, description, poster URL, price and currency, organizer, source links, status, and creation, update, last-checked and last-seen timestamps. Unknown values are null; free and unknown price are distinct. Convert known local date-times to UTC, preserving the timezone and date/time precision so a date without a time is never presented as midnight. Events without a known date are retained but excluded from the upcoming date-ordered catalogue. Validate URLs, dates and nonnegative prices. Images are displayed only when their use is permitted; otherwise use the existing fallback.
+
+Source identity is a canonical source URL or stable provider ID. Enforce uniqueness at source identity level and upsert idempotently. Merge across sources only when normalized title, date and venue provide strong corroborating evidence; ambiguous matches remain separate. Retain per-source observations and links so conflicting facts are traceable. Use a deterministic source precedence for displayed values, and never replace a known value with a missing one from another source. Refresh last-seen only when an event is observed; a failed run or a single absence never deletes or cancels it. Record run outcome, counts and last successful run separately. No production database writes or deployments are part of this work.
+
+## API and customer experience
+
+Extend the existing Express public events API, preserving its response envelope and existing SeatLock detail and booking contracts. Add a source/type discriminator and appropriate optional fields to external catalogue entries; SeatLock entries retain their existing fields. Filtering by search, category, city and dates applies to both sets, with deterministic chronological sorting and pagination across the combined results. Keep existing clients compatible where possible and specify pagination defaults and limits in the implementation. External detail retrieval uses a distinct, unambiguous path within the existing events API; it exposes validated source links and does not expose seat or hold operations.
+
+Update the existing React catalogue to display category, date, venue, price and source where known, with appropriate unknown-value labels. Customers may open a SeatLock detail view for an external event and select a source link that leads to the original provider. External links use safe HTTP(S) URLs; SeatLock-created cards continue to lead to their existing detail and seat-selection experience. Search, filtering, pagination, loading, empty and error states apply to the combined catalogue.
+
+## Verification and operations
+
+Use saved HTML fixtures for parsing, missing fields and malformed content; test date/time precision and timezone conversion, URL and price validation, safe cross-source matching, idempotent upserts and source failure isolation without live sites. Add server integration tests for combined filtering, sorting, pagination, source links and existing booking isolation, plus React tests for both kinds of cards and external navigation. Run relevant Python, server and client checks. Separately report which sources were actually tested live and distinguish those from fixture-only tests. Document Windows setup, environment variables, commands, database and index choices, results and limitations without revealing credentials.

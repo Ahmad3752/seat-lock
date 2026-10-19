@@ -2,6 +2,8 @@
 
 A TypeScript MERN project for concurrency-safe reserved-seat ticketing, including public event discovery and temporary seat holds.
 
+Ticketwala external-event discovery is available through the separate [Python scraper](scraper/README.md). Run it manually against the same local MongoDB database, then open Events to see upcoming listings and links to the original provider.
+
 ## Run locally
 
 1. Start a MongoDB replica set as described below. Create `server/.env` from [`server/.env.example`](server/.env.example) and set a long random JWT secret.

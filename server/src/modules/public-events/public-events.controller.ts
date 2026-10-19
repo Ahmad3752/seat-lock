@@ -5,6 +5,7 @@ import { Event } from "../../models/event.model.js";
 import { EventSeat } from "../../models/event-seat.model.js";
 import { Venue } from "../../models/venue.model.js";
 import { asyncHandler } from "../../utils/async-handler.js";
+import { combinedCatalogue } from "./catalogue.js";
 
 const MAX_FILTER_LENGTH = 100;
 
@@ -47,7 +48,7 @@ function optionalText(value: unknown, label: string) {
   return text || undefined;
 }
 
-function optionalDate(value: unknown, label: string, endOfDay = false) {
+function optionalDate(value: unknown, label: string, endOfDay = false, pakistanDay = false) {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || !value.trim()) throw new AppError(422, "VALIDATION_ERROR", `${label} must be a valid date.`);
   const calendar = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(value);
@@ -55,7 +56,8 @@ function optionalDate(value: unknown, label: string, endOfDay = false) {
   const [year, month, day] = calendar.slice(1).map(Number);
   const check = new Date(Date.UTC(year!, month! - 1, day!));
   if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month! - 1 || check.getUTCDate() !== day) throw new AppError(422, "VALIDATION_ERROR", `${label} must be a valid date.`);
-  const normalized = endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T23:59:59.999Z` : value;
+  const calendarOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const normalized = calendarOnly && pakistanDay ? `${value}T${endOfDay ? '23:59:59.999' : '00:00:00'}+05:00` : endOfDay && calendarOnly ? `${value}T23:59:59.999Z` : value;
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) throw new AppError(422, "VALIDATION_ERROR", `${label} must be a valid date.`);
   return date;
@@ -85,11 +87,12 @@ function publicDetail(event: PublicEvent, venue: VenueSummary) {
 }
 
 export const listPublicEvents: RequestHandler = asyncHandler(async (req, res) => {
+  const paginated = req.query.kind !== undefined || req.query.page !== undefined || req.query.limit !== undefined;
   const q = optionalText(req.query.q, "Search");
   const category = optionalText(req.query.category, "Category");
   const city = optionalText(req.query.city, "City");
-  const from = optionalDate(req.query.from, "From date");
-  const to = optionalDate(req.query.to, "To date", true);
+  const from = optionalDate(req.query.from, "From date", false, paginated);
+  const to = optionalDate(req.query.to, "To date", true, paginated);
   if (from && to && from > to) throw new AppError(422, "VALIDATION_ERROR", "From date must be before the to date.");
 
   let venueIds: Types.ObjectId[] | undefined;
@@ -103,6 +106,11 @@ export const listPublicEvents: RequestHandler = asyncHandler(async (req, res) =>
   if (q) filter.title = { $regex: new RegExp(escapeRegex(q), "i") };
   if (category) filter.category = { $regex: new RegExp(escapeRegex(category), "i") };
   if (venueIds) filter.venueId = { $in: venueIds };
+
+  if (paginated) {
+    res.status(200).json({ data: await combinedCatalogue(req.query, filter, { q, category, city, from, to }) });
+    return;
+  }
 
   const events = await Event.find(filter).sort({ startsAt: 1 }).lean() as unknown as PublicEvent[];
   const venues = await Venue.find({ _id: { $in: events.map((event) => event.venueId) } }).select("name address").lean() as unknown as VenueSummary[];

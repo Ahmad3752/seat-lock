@@ -7,7 +7,7 @@ import { formatHoldCountdown, reconcileSelectedSeats, remainingHoldSeconds } fro
 import { io } from "socket.io-client";
 
 type Navigate = (to: string) => void;
-type PublicEventCard = { id: string; slug: string; title: string; category: string; posterUrl: string; startsAt: string; priceFrom: number; venue: { name: string; address: string } };
+type PublicEventCard = { id: string; slug?: string; kind?: 'seatlock' | 'external'; title: string; category: string | null; posterUrl?: string | null; startsAt: string; priceFrom: number | null; currency?: string | null; timezone?: string | null; datePrecision?: 'date' | 'datetime'; sources?: Array<{ name: string; url: string }>; venue: { name: string | null; address: string | null } };
 type PublicEventDetail = { id: string; slug: string; title: string; description: string; posterUrl: string; category: string; venue: { name: string; address: string }; startsAt: string; endsAt: string; timezone: string; currency: string; sale: { startsAt: string | null; endsAt: string | null; isOpen: boolean }; pricing: { from: number; to: number; sections: Array<{ section: string; amount: number }> } };
 type SeatHold = { id: string; status: string; expiresAt: string; seats: Array<{ id: string; label: string; price: number }>; total: number; currency: string };
 
@@ -24,10 +24,32 @@ function PublicLink({ to, navigate, children, className }: { to: string; navigat
   }}>{children}</a>;
 }
 
-function Poster({ src, title }: { src: string; title: string }) {
+function Poster({ src, title }: { src?: string | null; title: string }) {
   const [isBroken, setIsBroken] = useState(!src);
   if (isBroken) return <div className="event-poster event-poster-fallback" aria-label={`No poster available for ${title}`}>SeatLock<br />Event</div>;
-  return <img className="event-poster" src={src} alt={`${title} poster`} onError={() => setIsBroken(true)} />;
+  return <img className="event-poster" src={src || undefined} alt={`${title} poster`} onError={() => setIsBroken(true)} />;
+}
+
+function CatalogueCard({ event, navigate }: { event: PublicEventCard; navigate: Navigate }) {
+  const external = event.kind === 'external';
+  const sources = (event.sources ?? []).filter((source) => /^https:\/\/(?:www\.)?ticketwala\.(?:pk|events)\/event\//.test(source.url));
+  const dateOptions: Intl.DateTimeFormatOptions = { dateStyle: 'medium', ...(event.datePrecision === 'date' ? {} : { timeStyle: 'short' as const }) };
+  let dateFormat: Intl.DateTimeFormat;
+  try { dateFormat = new Intl.DateTimeFormat('en-PK', { ...dateOptions, timeZone: event.timezone || 'Asia/Karachi' }); }
+  catch { dateFormat = new Intl.DateTimeFormat('en-PK', { ...dateOptions, timeZone: 'Asia/Karachi' }); }
+  const date = dateFormat.format(new Date(event.startsAt));
+  const price = event.priceFrom == null ? 'Price not listed' : event.priceFrom === 0 ? 'Free' : `From ${new Intl.NumberFormat('en-PK', { style: 'currency', currency: event.currency || 'PKR' }).format(event.priceFrom)}`;
+  return <article className="event-card card">
+    <Poster src={event.posterUrl} title={event.title} />
+    <div className="event-card-body">
+      <p className="eyebrow">{event.category || 'Event'} · {external ? 'External event' : 'SeatLock'}</p>
+      <h2>{external ? (sources[0] ? <a href={sources[0].url} target="_blank" rel="noopener noreferrer">{event.title}</a> : event.title) : <PublicLink to={`/events/${event.slug}`} navigate={navigate}>{event.title}</PublicLink>}</h2>
+      <p>{event.venue.name || 'Venue to be announced'}{event.venue.address ? ` · ${event.venue.address}` : ''}</p>
+      <p>{date}{event.datePrecision === 'date' ? ' · Time to be announced' : ''}</p>
+      <strong>{price}</strong>
+      {external && <div className="event-source-links">{sources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer">View on {source.name} ↗</a>)}</div>}
+    </div>
+  </article>;
 }
 
 export function EventCataloguePage({ navigate }: { navigate: Navigate }) {
@@ -37,20 +59,25 @@ export function EventCataloguePage({ navigate }: { navigate: Navigate }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pages: 0, total: 0 });
 
   useEffect(() => {
     let active = true;
-    void api<{ events: PublicEventCard[] }>(`/events${buildEventQuery(submittedFilters)}`)
-      .then((data) => { if (active) setEvents(data.events); })
+    const query = new URLSearchParams(buildEventQuery(submittedFilters));
+    query.set('kind', 'all'); query.set('page', String(page)); query.set('limit', '12');
+    void api<{ events: PublicEventCard[]; pagination: { page: number; pages: number; total: number } }>(`/events?${query}`)
+      .then((data) => { if (active) { setEvents(data.events); setPagination(data.pagination); } })
       .catch((caught) => { if (active) setError(readableError(caught, "Unable to load events.")); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [submittedFilters, reloadKey]);
+  }, [submittedFilters, reloadKey, page]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setLoading(true);
+    setPage(1);
     setSubmittedFilters({ ...filters });
   }
 
@@ -59,11 +86,12 @@ export function EventCataloguePage({ navigate }: { navigate: Navigate }) {
     setFilters(cleared);
     setError("");
     setLoading(true);
+    setPage(1);
     setSubmittedFilters(cleared);
   }
 
   return <section className="public-events-page" aria-labelledby="events-heading">
-    <div className="public-intro"><p className="eyebrow">DISCOVER EVENTS</p><h1 id="events-heading">Find your next seat.</h1><p className="muted">Browse upcoming events and choose your seats when you are ready.</p></div>
+    <div className="public-intro"><p className="eyebrow">DISCOVER EVENTS</p><h1 id="events-heading">Find your next experience.</h1><p className="muted">Explore upcoming events. Book with SeatLock or visit the event's original provider.</p></div>
     <form className="event-filters card" onSubmit={submit} aria-label="Filter events">
       <label>Search events<input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Artist, show, or event" /></label>
       <label>Category<input value={filters.category} onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))} placeholder="Music" /></label>
@@ -75,7 +103,12 @@ export function EventCataloguePage({ navigate }: { navigate: Navigate }) {
     {loading && <p className="public-state muted" aria-live="polite">Loading upcoming events…</p>}
     {!loading && error && <section className="card public-state" role="alert"><h2>We could not load events</h2><p>{error}</p><button type="button" onClick={() => { setError(""); setLoading(true); setReloadKey((current) => current + 1); }}>Try again</button></section>}
     {!loading && !error && events.length === 0 && <section className="card public-state"><h2>No upcoming events found</h2><p>Try adjusting your search or filters.</p><button type="button" className="secondary" onClick={clearFilters}>Clear filters</button></section>}
-    {!loading && !error && events.length > 0 && <div className="event-catalogue">{events.map((event) => <article className="event-card card" key={event.id}><Poster src={event.posterUrl} title={event.title} /><div className="event-card-body"><p className="eyebrow">{event.category}</p><h2><PublicLink to={`/events/${event.slug}`} navigate={navigate}>{event.title}</PublicLink></h2><p>{event.venue.name} · {event.venue.address}</p><p>{dateTime(event.startsAt)}</p><strong>From {money(event.priceFrom)}</strong></div></article>)}</div>}
+    {!loading && !error && events.length > 0 && <div className="event-catalogue">{events.map((event) => <CatalogueCard key={`${event.kind || 'seatlock'}:${event.id}`} event={event} navigate={navigate} />)}</div>}
+    {!loading && !error && pagination.pages > 1 && <nav className="event-pagination" aria-label="Event pages">
+      <button type="button" disabled={page <= 1} onClick={() => { setLoading(true); setPage(page - 1); }}>Previous</button>
+      <span>Page {page} of {pagination.pages} · {pagination.total} events</span>
+      <button type="button" disabled={page >= pagination.pages} onClick={() => { setLoading(true); setPage(page + 1); }}>Next</button>
+    </nav>}
   </section>;
 }
 
