@@ -80,12 +80,22 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(event['venue'], source['location'])
         self.assertEqual(event['sourceKey'], 'ticketwala:7849')
 
+    def test_source_banner_and_category_are_saved(self):
+        fixture = json.loads(Path('tests/fixtures/ticketwala-list.json').read_text(encoding='utf-8'))
+        source = dict(fixture['items'][0], bannerPath='https://v5.ticketwala.pk/uploads/events/banner/farmers.jpg')
+        event = ticketwala.normalize_listing(source, '', ['Festivals & Markets'])
+        self.assertEqual(event['categories'], ['Festivals & Markets'])
+        self.assertEqual(event['posterUrl'], source['bannerPath'])
+        source['bannerPath'] = 'javascript:alert(1)'
+        self.assertIsNone(ticketwala.normalize_listing(source, '')['posterUrl'])
+
     def test_public_list_pagination_and_no_fake_empty_success(self):
         fixture = json.loads(Path('tests/fixtures/ticketwala-list.json').read_text(encoding='utf-8'))
         scraper = TicketwalaScraper(delay=0)
-        scraper.get = Mock(side_effect=['User-agent: *\nAllow: /', json.dumps({'items': fixture['items'][:1], 'totalPages': 2}), '<html></html>', json.dumps({'items': fixture['items'][1:2], 'totalPages': 2}), '<html></html>'])
+        scraper.get = Mock(side_effect=['User-agent: *\nAllow: /', json.dumps({'items': fixture['items'][:1], 'totalPages': 2}), '<html></html>', json.dumps({'items': fixture['items'][1:2], 'totalPages': 2}), '<html></html>', json.dumps([{'id': '8', 'name': 'Festivals & Markets'}]), json.dumps({'items': fixture['items'][:1], 'totalPages': 1})])
         events = scraper.fetch_events()
         self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]['categories'], ['Festivals & Markets'])
         self.assertTrue(any('page=2' in call.args[0] for call in scraper.get.call_args_list))
         scraper.get = Mock(side_effect=['User-agent: *\nAllow: /', '{}'])
         with self.assertRaisesRegex(ScrapeError, 'structure'):

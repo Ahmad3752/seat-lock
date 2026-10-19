@@ -25,9 +25,9 @@ function PublicLink({ to, navigate, children, className }: { to: string; navigat
 }
 
 function Poster({ src, title }: { src?: string | null; title: string }) {
-  const [isBroken, setIsBroken] = useState(!src);
-  if (isBroken) return <div className="event-poster event-poster-fallback" aria-label={`No poster available for ${title}`}>SeatLock<br />Event</div>;
-  return <img className="event-poster" src={src || undefined} alt={`${title} poster`} onError={() => setIsBroken(true)} />;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (!src || failedSrc === src) return <div className="event-poster event-poster-fallback" aria-label={`No poster available for ${title}`}>SeatLock<br />Event</div>;
+  return <img className="event-poster" src={src} alt={`${title} poster`} onError={() => setFailedSrc(src)} />;
 }
 
 function CatalogueCard({ event, navigate }: { event: PublicEventCard; navigate: Navigate }) {
@@ -56,11 +56,21 @@ export function EventCataloguePage({ navigate }: { navigate: Navigate }) {
   const [filters, setFilters] = useState(emptyFilters);
   const [submittedFilters, setSubmittedFilters] = useState(emptyFilters);
   const [events, setEvents] = useState<PublicEventCard[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [categoriesError, setCategoriesError] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, pages: 0, total: 0 });
+
+  useEffect(() => {
+    let active = true;
+    void api<{ categories: string[] }>('/events/categories')
+      .then((data) => { if (active && Array.isArray(data.categories)) setCategories(data.categories); })
+      .catch(() => { if (active) setCategoriesError(true); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -94,11 +104,11 @@ export function EventCataloguePage({ navigate }: { navigate: Navigate }) {
     <div className="public-intro"><p className="eyebrow">DISCOVER EVENTS</p><h1 id="events-heading">Find your next experience.</h1><p className="muted">Explore upcoming events. Book with SeatLock or visit the event's original provider.</p></div>
     <form className="event-filters card" onSubmit={submit} aria-label="Filter events">
       <label>Search events<input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Artist, show, or event" /></label>
-      <label>Category<input value={filters.category} onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))} placeholder="Music" /></label>
-      <label>City<input value={filters.city} onChange={(event) => setFilters((current) => ({ ...current, city: event.target.value }))} placeholder="Karachi" /></label>
+      <label>Category<select value={filters.category} onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))}><option value="">All categories</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
       <label>From<input type="date" value={filters.from} onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))} /></label>
       <label>To<input type="date" value={filters.to} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} /></label>
       <div className="filter-actions"><button type="submit">Apply filters</button><button type="button" className="text-button" onClick={clearFilters}>Clear</button></div>
+      {categoriesError && <p className="form-error" role="status">Could not load categories. Refresh the page to try again.</p>}
     </form>
     {loading && <p className="public-state muted" aria-live="polite">Loading upcoming events…</p>}
     {!loading && error && <section className="card public-state" role="alert"><h2>We could not load events</h2><p>{error}</p><button type="button" onClick={() => { setError(""); setLoading(true); setReloadKey((current) => current + 1); }}>Try again</button></section>}

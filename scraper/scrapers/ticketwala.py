@@ -25,7 +25,7 @@ def ticket_price(html):
                 prices.append(float(re.sub(r'[^\d.]', '', label)))
     return min(prices) if prices else None
 
-def normalize_listing(item, html):
+def normalize_listing(item, html, categories=None):
     if not isinstance(item, dict) or not re.fullmatch(r'\d+', str(item.get('id', ''))):
         raise ValueError('Missing Ticketwala event ID')
     slug = item.get('slug')
@@ -42,9 +42,13 @@ def normalize_listing(item, html):
     event = normalize(raw, raw['url'])
     event['sourceKey'] = 'ticketwala:' + str(item['id'])
     event['sourceId'] = str(item['id'])
-    if item.get('type') == 'workshops':
-        event['category'] = 'Workshops'
-    # Factual fields only. No copied descriptions or poster reuse permissions assumed.
+    event['categories'] = list(categories or (['Workshops'] if item.get('type') == 'workshops' else ['Other']))
+    event['category'] = event['categories'][0]
+    banner = item.get('bannerPath')
+    if isinstance(banner, str):
+        parts = urlsplit(banner)
+        if parts.scheme == 'https' and parts.netloc == 'v5.ticketwala.pk' and parts.path.startswith('/uploads/events/banner/'):
+            event['posterUrl'] = banner
     return event
 
 class ScrapeError(RuntimeError):
@@ -126,4 +130,43 @@ class TicketwalaScraper:
             if not data['items']:
                 raise ScrapeError('Unexpected empty page before end of pagination')
             page += 1
+        if records:
+            try:
+                categories = json.loads(self.get(self.origin + '/api/public/categories/public'))
+            except ValueError:
+                raise ScrapeError('Category listing returned invalid JSON') from None
+            if not isinstance(categories, list) or any(not isinstance(c, dict) or not re.fullmatch(r'\d+', str(c.get('id', ''))) or not isinstance(c.get('name'), str) or not c['name'].strip() for c in categories):
+                raise ScrapeError('Category listing structure changed')
+            memberships = {key: [] for key in records}
+            for category in categories:
+                logging.info('Checking Ticketwala category: %s', category['name'].strip())
+                page = 1
+                seen_pages = set()
+                while True:
+                    params = urlencode({'city': 'islamabad', 'present': 'true', 'page': page, 'perPage': 6, 'category': category['id']})
+                    try:
+                        data = json.loads(self.get(self.origin + '/api/public/events/public?' + params))
+                    except ValueError:
+                        raise ScrapeError('Category events returned invalid JSON') from None
+                    if not isinstance(data, dict) or not isinstance(data.get('items'), list) or type(data.get('totalPages')) is not int or data['totalPages'] < 0 or data['totalPages'] > self.max_pages:
+                        raise ScrapeError('Category events structure or pagination changed')
+                    fingerprint = tuple(str(item.get('id')) for item in data['items'] if isinstance(item, dict))
+                    if fingerprint and fingerprint in seen_pages:
+                        raise ScrapeError('Category pagination repeated a page')
+                    seen_pages.add(fingerprint)
+                    for item in data['items']:
+                        if not isinstance(item, dict) or not re.fullmatch(r'\d+', str(item.get('id', ''))):
+                            raise ScrapeError('Malformed category event')
+                        key = 'ticketwala:' + str(item['id'])
+                        if key in memberships and category['name'].strip() not in memberships[key]:
+                            memberships[key].append(category['name'].strip())
+                    if page >= data['totalPages']:
+                        break
+                    if not data['items']:
+                        raise ScrapeError('Unexpected empty category page')
+                    page += 1
+            for key, labels in memberships.items():
+                if labels:
+                    records[key]['categories'] = labels
+                    records[key]['category'] = labels[0]
         return list(records.values())

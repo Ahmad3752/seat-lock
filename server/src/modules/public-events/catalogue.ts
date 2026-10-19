@@ -5,6 +5,10 @@ import { Venue } from '../../models/venue.model.js';
 import { AppError } from '../../errors/app-error.js';
 
 const allowedSource = /^https:\/\/(?:www\.)?ticketwala\.(?:pk|events)\/event\/[a-zA-Z0-9_~%./-]+(?:\?[^\s#]*)?$/;
+export function visibleExternalEvents(now: Date): Record<string, unknown> {
+  return { status: 'published', startAt: { $type: 'date' }, sources: { $elemMatch: { name: 'Ticketwala', url: allowedSource } },
+    $expr: { $gte: [{ $cond: [{ $eq: ['$datePrecision', 'date'] }, { $add: ['$startAt', 86400000] }, '$startAt'] }, now] } };
+}
 function pageNumber(value: unknown, fallback: number, max: number) {
   if (value === undefined) return fallback;
   if (typeof value !== 'string' || !/^\d+$/.test(value) || Number(value) < 1 || Number(value) > max) {
@@ -20,16 +24,16 @@ export async function combinedCatalogue(query: Record<string, unknown>, ownFilte
   const page = pageNumber(query.page, 1, 1000);
   const limit = pageNumber(query.limit, 12, 100);
   const now = new Date();
-  const externalFilter: Record<string, unknown> = {
-    status: 'published', startAt: { $type: 'date' },
-    sources: { $elemMatch: { name: 'Ticketwala', url: allowedSource } },
-    $expr: { $gte: [{ $cond: [{ $eq: ['$datePrecision', 'date'] }, { $add: ['$startAt', 86400000] }, '$startAt'] }, now] },
-  };
+  const externalFilter: Record<string, unknown> = visibleExternalEvents(now);
   if (options.from || options.to) externalFilter.startAt = {
     $type: 'date', ...(options.from ? { $gte: options.from } : {}), ...(options.to ? { $lte: options.to } : {}),
   };
-  for (const [field, value] of Object.entries({ title: options.q, category: options.category, city: options.city })) {
+  for (const [field, value] of Object.entries({ title: options.q, city: options.city })) {
     if (value) externalFilter[field] = { $regex: new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
+  }
+  if (options.category) {
+    const regex = new RegExp(options.category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    externalFilter.$or = [{ category: regex }, { categories: regex }];
   }
   const externalPipeline: Array<PipelineStage.Match | PipelineStage.Project> = [
     { $match: externalFilter },

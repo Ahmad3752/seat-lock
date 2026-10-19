@@ -72,3 +72,13 @@ test('calendar filters include Pakistan date-only events and exclude following l
   const result = await request(app).get('/api/v1/events?kind=external&from=2035-01-02&to=2035-01-02').expect(200);
   assert.deepEqual(result.body.data.events.map((event: { title: string }) => event.title), ['DateOnly']);
 });
+
+test('category choices include all distinct upcoming event categories and filter multiple labels', async () => {
+  await seed('Market', { category: 'Food', categories: ['Food', 'Festivals & Markets'] });
+  await seed('Concert', { category: 'Concerts & Live Music', categories: ['Concerts & Live Music'] });
+  await seed('Old', { category: 'Past Category', startAt: new Date('2020-01-01') });
+  const categories = await request(app).get('/api/v1/events/categories').expect(200);
+  assert.deepEqual(categories.body.data.categories, ['Concerts & Live Music', 'Festivals & Markets', 'Food']);
+  const matches = await request(app).get('/api/v1/events').query({ kind: 'all', category: 'Festivals & Markets' }).expect(200);
+  assert.deepEqual(matches.body.data.events.map((event: { title: string }) => event.title), ['Market']);
+});

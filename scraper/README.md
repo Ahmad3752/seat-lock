@@ -42,6 +42,8 @@ npm run dev
 
 Open the client URL printed by Vite and choose **Events** (`/events`). External event titles and **View on Ticketwala** open the original event in a new tab. SeatLock events retain their internal detail/seat-selection flow. A new scrape updates MongoDB; refresh the catalogue to see it. The server need not be running during ingestion, but MongoDB must be running.
 
+After updating the code, run the import again to populate categories and poster URLs on existing Ticketwala records. Starting the client and server does not automatically run the scraper. The category dropdown lists the categories of upcoming published events saved in the database; events without a source category use Other (or Workshops when identified by the source).
+
 `--all` currently means Ticketwala only. `--source bookme` and other providers are intentionally unsupported until the next increment.
 
 ## Configuration
@@ -67,8 +69,8 @@ Verified live on **19 October 2026**:
 - Public detail pages contain `[data-sentry-component="TicketItem"]` with ticket name/price `h4` elements. Parse exact price labels and preserve unknown prices as null. Zero explicitly means free. Starting prices may include specific attendee or group ticket types; availability and conditions must be checked at the provider.
 - The live run found **17** listings across **3** pages. **15** were upcoming; two had already started. Counts change as the source changes. One listing's price was not exposed by the verified HTML selector and remains unknown.
 - API date strings are local Pakistan wall time. Confirmed against the visible SOT Events page: 24 Oct at 11am becomes 06:00 UTC. Its schema.org `Z` timestamps disagree with visible local times, so the adapter uses the public listing's local timestamps instead.
-- Categories are generally absent from the response; they remain null (displayed as "Event"). A source record explicitly marked `workshops` maps to Workshops. No inferred genres are presented as source facts.
-- Poster and description reuse permission was not established. Both remain null in this increment. The client uses its existing placeholder. Only factual listing metadata is stored.
+- The adapter queries Ticketwala's public categories and category-filtered event listings to associate source categories with event IDs. Multiple categories are retained. Unclassified events use Other, or Workshops when marked as such by the source.
+- The adapter stores the public Ticketwala banner URL when available, and the client loads it directly from Ticketwala. Missing or failed images use the placeholder. Descriptions remain null. Permission to reuse the images has not been established.
 - The linked `/terms-conditions` was reviewed. It includes restrictions on automated ordering and commercial promotional sharing, and provides no general image reuse license. This local development integration does not purchase or republish ticket products. Public commercial deployment or media reuse needs a separate permission review; no deployment is included here.
 
 Initial urllib/web probes returned 403/1010; the ordinary requests session with the honest scraper User-Agent subsequently returned 200. No anti-bot bypass was implemented. Any future blocked response will be reported rather than worked around.

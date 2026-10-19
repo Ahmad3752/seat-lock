@@ -28,3 +28,15 @@ it('keeps the catalogue usable for older events with invalid timezones', async (
   render(<EventCataloguePage navigate={vi.fn()} />);
   expect(await screen.findByRole('link', { name: 'Older Event' })).toBeTruthy();
 });
+
+it('offers categories from the API, removes city and renders the source poster', async () => {
+  vi.mocked(api).mockImplementation(async (path) => path === '/events/categories' ? { categories: ['Festivals & Markets', 'Music'] } : { events: [{ id: 'market', kind: 'external', title: 'Farmers Market', category: 'Festivals & Markets', posterUrl: 'https://v5.ticketwala.pk/uploads/events/banner/farmers.jpg', startsAt: '2035-02-01T13:00:00Z', venue: { name: 'Hall', address: 'Islamabad' }, priceFrom: 500, sources: [{ name: 'Ticketwala', url: 'https://ticketwala.pk/event/farmers' }] }], pagination: { page: 1, pages: 1, total: 1 } });
+  render(<EventCataloguePage navigate={vi.fn()} />);
+  const category = await screen.findByRole('combobox', { name: 'Category' });
+  expect(screen.queryByLabelText('City')).toBeNull();
+  expect(screen.getByRole('option', { name: 'Festivals & Markets' })).toBeTruthy();
+  expect((await screen.findByRole('img', { name: 'Farmers Market poster' })).getAttribute('src')).toContain('farmers.jpg');
+  fireEvent.change(category, { target: { value: 'Festivals & Markets' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
+  await waitFor(() => expect(vi.mocked(api).mock.calls.some(([url]) => url.includes('category=Festivals'))).toBe(true));
+});

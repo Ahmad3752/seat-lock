@@ -6,6 +6,7 @@ const externalEventSchema = new Schema({
   sourceId: { type: String, default: null },
   title: { type: String, required: true },
   category: { type: String, default: null },
+  categories: { type: [String], default: [] },
   startAt: { type: Date, default: null }, endAt: { type: Date, default: null },
   datePrecision: { type: String, enum: ['date', 'datetime'], default: null },
   timezone: { type: String, default: null }, city: { type: String, default: null },

@@ -2,10 +2,11 @@ import type { RequestHandler } from "express";
 import { Types } from "mongoose";
 import { AppError } from "../../errors/app-error.js";
 import { Event } from "../../models/event.model.js";
+import { ExternalEvent } from "../../models/external-event.model.js";
 import { EventSeat } from "../../models/event-seat.model.js";
 import { Venue } from "../../models/venue.model.js";
 import { asyncHandler } from "../../utils/async-handler.js";
-import { combinedCatalogue } from "./catalogue.js";
+import { combinedCatalogue, visibleExternalEvents } from "./catalogue.js";
 
 const MAX_FILTER_LENGTH = 100;
 
@@ -85,6 +86,17 @@ function publicDetail(event: PublicEvent, venue: VenueSummary) {
     currency: event.currency, sale: saleAvailability(event), pricing: pricingSummary(event.sectionPrices),
   };
 }
+
+export const listEventCategories: RequestHandler = asyncHandler(async (_req, res) => {
+  const now = new Date();
+  const [own, external] = await Promise.all([
+    Event.find({ status: 'published', startsAt: { $gte: now } }).distinct('category'),
+    ExternalEvent.find(visibleExternalEvents(now)).select('category categories').lean(),
+  ]);
+  const labels = [...own, ...external.flatMap((event) => [event.category, ...(event.categories || [])])];
+  const categories = [...new Set(labels.filter((label): label is string => typeof label === 'string' && !!label.trim()).map((label) => label.trim()))].sort((a, b) => a.localeCompare(b));
+  res.status(200).json({ data: { categories } });
+});
 
 export const listPublicEvents: RequestHandler = asyncHandler(async (req, res) => {
   const paginated = req.query.kind !== undefined || req.query.page !== undefined || req.query.limit !== undefined;
