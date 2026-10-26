@@ -82,3 +82,13 @@ test('category choices include all distinct upcoming event categories and filter
   const matches = await request(app).get('/api/v1/events').query({ kind: 'all', category: 'Festivals & Markets' }).expect(200);
   assert.deepEqual(matches.body.data.events.map((event: { title: string }) => event.title), ['Market']);
 });
+
+test('catalogue accepts verified provider links and rejects mismatched source names', async () => {
+  await seed('AllEvents', { sources: [{ name: 'AllEvents', url: 'https://allevents.in/islamabad/show/1234' }] });
+  await seed('Shapargullay', { sources: [{ name: 'Shapargullay', url: 'https://shapargullay.com/events/show' }] });
+  await seed('Media', { sources: [{ name: 'Media Sniffers', url: 'https://mediasniffers.pk/upcoming-music-events-in-pakistan-2026-organized-by-media-sniffers/' }] });
+  await seed('Bookme', { sources: [{ name: 'Bookme', url: 'https://bookme.pk/events/farmers-market' }] });
+  await seed('Wrong source', { sources: [{ name: 'Ticketwala', url: 'https://allevents.in/islamabad/show/1234' }] });
+  const result = await request(app).get('/api/v1/events?kind=external').expect(200);
+  assert.deepEqual(result.body.data.events.map((event: { title: string }) => event.title).sort(), ['AllEvents', 'Bookme', 'Media', 'Shapargullay']);
+});

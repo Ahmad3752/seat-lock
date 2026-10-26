@@ -1,6 +1,6 @@
-# SeatLock: Ticketwala scraper
+# SeatLock: event scrapers
 
-Python `requests` collects the public paginated listing used by Ticketwala's own city page; BeautifulSoup extracts ticket prices from each public event page. Playwright is unnecessary for the verified path. This first increment supports **Ticketwala / Islamabad only**. It writes to MongoDB; React continues to read exclusively through Express.
+Python `requests` and BeautifulSoup collect public event data for Islamabad from Ticketwala, AllEvents, Shapargullay and Media Sniffers. Bookme's JavaScript-rendered cards use Playwright. They write to MongoDB; React reads through Express.
 
 ## Run on Windows PowerShell
 
@@ -10,6 +10,12 @@ From the repository:
 cd C:\Projects\Seat_Lock\scraper
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Bookme uses an installed Google Chrome when available. If Chrome is not installed, install Playwright's Chromium once with:
+
+```powershell
+.\.venv\Scripts\python.exe -m playwright install chromium
 ```
 
 The virtual environment has already been created in this checkout. Activation is optional; using its Python executable avoids PowerShell execution-policy issues.
@@ -44,7 +50,19 @@ Open the client URL printed by Vite and choose **Events** (`/events`). External 
 
 After updating the code, run the import again to populate categories and poster URLs on existing Ticketwala records. Starting the client and server does not automatically run the scraper. The category dropdown lists the categories of upcoming published events saved in the database; events without a source category use Other (or Workshops when identified by the source).
 
-`--all` currently means Ticketwala only. `--source bookme` and other providers are intentionally unsupported until the next increment.
+Run the supported sources individually or all together:
+
+```powershell
+.\.venv\Scripts\python.exe main.py --source allevents
+.\.venv\Scripts\python.exe main.py --source shapargullay
+.\.venv\Scripts\python.exe main.py --source bookme
+.\.venv\Scripts\python.exe main.py --source mediasniffers
+.\.venv\Scripts\python.exe main.py --all
+```
+
+Add `--dry-run --output output\events.json` to inspect results without writing to MongoDB. `--all` continues with the other providers if one fails, and exits nonzero if any provider fails. Repeated runs update records by provider identity. The same event listed by different providers can appear more than once.
+
+AllEvents uses its public Islamabad and concerts pages; general listings without a source category are labeled Other, and many only provide a date rather than a time. Shapargullay uses its Islamabad listing and structured detail pages; separate performances receive separate records. Bookme uses the browser-rendered all-events listing and follows Islamabad cards to their original URLs; its cards provide dates, not precise times. Media Sniffers uses its music article and requires an explicit Islamabad city or venue and date; article-only events link back to that article, with unknown price, time or poster left blank. Upcoming events appear on the site; older events are excluded by the catalogue.
 
 ## Configuration
 
@@ -83,7 +101,7 @@ The JSON snapshot from the verified run is locally available at `output/ticketwa
 - Unique `sourceKey` = `ticketwala:<source ID>`; stable even when the event slug changes. Index `(status, startAt)` supports catalogue filtering. Never writes to existing `events`, `venues`, seats, holds or bookings.
 - BSON UTC dates plus `timezone`, `datePrecision`, nullable fields, original source URLs and check/seen timestamps. Successful source observations replace their own record; `$setOnInsert` preserves creation time. No deletion when a scrape fails or an event disappears.
 - `scraper_runs` stores the latest result and retains `lastSuccessfulAt` across failures, when a database connection is available.
-- Cross-provider matching/provenance merging is deferred until another provider is added. Repeated Ticketwala IDs are deduplicated now; no fuzzy title merging.
+- Cross-provider matching/provenance merging is deferred. Repeated source identities are deduplicated; no fuzzy title merging.
 - Existing `GET /api/v1/events` without new query options preserves its old SeatLock-only contract.
 - Catalogue uses `GET /api/v1/events?kind=all&page=1&limit=12`; `kind` accepts `all`, `external`, `seatlock`. Existing `q/category/city/from/to` filters work. Pagination returns `{data:{events,pagination:{page,limit,total,pages}}}`. Maximum limit 100 and page 1000. Date-only query filters use Pakistan calendar boundaries for this new catalogue mode.
 - Own and external records are sorted/paginated together. External cards carry `kind`, `sources`, `timezone`, `currency`, `datePrecision` and nullable `priceFrom`. Source URLs are allowlisted. External IDs cannot resolve to internal event details or seat maps.

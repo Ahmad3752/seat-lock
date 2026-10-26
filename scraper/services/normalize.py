@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup
 
-HOSTS = {'ticketwala.pk', 'www.ticketwala.pk', 'ticketwala.events', 'www.ticketwala.events'}
+HOSTS = {'ticketwala.pk', 'www.ticketwala.pk', 'ticketwala.events', 'www.ticketwala.events', 'allevents.in', 'www.allevents.in', 'shapargullay.com', 'www.shapargullay.com', 'bookme.pk', 'www.bookme.pk', 'mediasniffers.pk', 'www.mediasniffers.pk'}
 CATEGORIES = {'MusicEvent': 'Concerts', 'EducationEvent': 'Workshops', 'BusinessEvent': 'Conferences',
               'TheaterEvent': 'Theatre', 'SportsEvent': 'Sports', 'FoodEvent': 'Food & Markets',
               'ComedyEvent': 'Comedy', 'ExhibitionEvent': 'Exhibitions', 'Festival': 'Festivals'}
@@ -18,7 +18,7 @@ def canonical_url(value):
         raise ValueError('Missing source URL')
     parts = urlsplit(value.strip())
     if parts.scheme not in ('http', 'https') or parts.hostname not in HOSTS or parts.username or parts.password or parts.port not in (None, 80, 443):
-        raise ValueError('Invalid Ticketwala source URL')
+        raise ValueError('Invalid event source URL')
     query = [(k, v) for k, v in parse_qsl(parts.query) if not k.lower().startswith('utm_') and k not in ('fbclid', 'gclid')]
     return urlunsplit(('https', parts.hostname, parts.path.rstrip('/') or '/', urlencode(sorted(query)), ''))
 
@@ -50,7 +50,7 @@ def nodes(value):
             if isinstance(child, (dict, list)):
                 yield from nodes(child)
 
-def normalize(raw, page_url):
+def normalize(raw, page_url, source_name='Ticketwala', source_key='ticketwala'):
     title = text(raw.get('name'), 150)
     if not title:
         raise ValueError('Event requires a title')
@@ -98,12 +98,12 @@ def normalize(raw, page_url):
     status = 'needs_review' if start is None else 'published'
     if str(raw.get('eventStatus', '')).endswith(('EventCancelled', 'EventPostponed')):
         status = 'cancelled'
-    return {'sourceKey': 'ticketwala:' + url, 'title': title, 'category': category,
+    return {'sourceKey': source_key + ':' + url, 'title': title, 'category': category,
             'startAt': start, 'endAt': end, 'datePrecision': precision, 'timezone': zone,
             'city': city, 'venue': text(location.get('name'), 250),
             'description': text(raw.get('description')), 'posterUrl': None,
             'price': price, 'currency': currency, 'organizer': organizer,
-            'sources': [{'name': 'Ticketwala', 'url': url}], 'status': status}
+            'sources': [{'name': source_name, 'url': url}], 'status': status}
 
 def parse_events(html, page_url):
     events = {}

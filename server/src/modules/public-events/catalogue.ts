@@ -4,9 +4,15 @@ import { ExternalEvent } from '../../models/external-event.model.js';
 import { Venue } from '../../models/venue.model.js';
 import { AppError } from '../../errors/app-error.js';
 
-const allowedSource = /^https:\/\/(?:www\.)?ticketwala\.(?:pk|events)\/event\/[a-zA-Z0-9_~%./-]+(?:\?[^\s#]*)?$/;
+const sourceRules = [
+  { name: 'Ticketwala', url: /^https:\/\/(?:www\.)?ticketwala\.(?:pk|events)\/event\/[a-zA-Z0-9_~%./-]+(?:\?[^\s#]*)?$/ },
+  { name: 'AllEvents', url: /^https:\/\/(?:www\.)?allevents\.in\/(?:islamabad\/[^\s?#]+\/|event\/)\d+\/?(?:\?[^\s#]*)?$/ },
+  { name: 'Shapargullay', url: /^https:\/\/(?:www\.)?shapargullay\.com\/events\/[a-zA-Z0-9_-]+\/?$/ },
+  { name: 'Bookme', url: /^https:\/\/(?:www\.)?bookme\.pk\/events\/[a-zA-Z0-9_-]+\/?$/ },
+  { name: 'Media Sniffers', url: /^https:\/\/(?:www\.)?mediasniffers\.pk\/upcoming-music-events-in-pakistan-2026-organized-by-media-sniffers\/?$/ },
+];
 export function visibleExternalEvents(now: Date): Record<string, unknown> {
-  return { status: 'published', startAt: { $type: 'date' }, sources: { $elemMatch: { name: 'Ticketwala', url: allowedSource } },
+  return { status: 'published', startAt: { $type: 'date' }, $or: sourceRules.map((rule) => ({ sources: { $elemMatch: rule } })),
     $expr: { $gte: [{ $cond: [{ $eq: ['$datePrecision', 'date'] }, { $add: ['$startAt', 86400000] }, '$startAt'] }, now] } };
 }
 function pageNumber(value: unknown, fallback: number, max: number) {
@@ -33,7 +39,7 @@ export async function combinedCatalogue(query: Record<string, unknown>, ownFilte
   }
   if (options.category) {
     const regex = new RegExp(options.category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    externalFilter.$or = [{ category: regex }, { categories: regex }];
+    externalFilter.$and = [{ $or: [{ category: regex }, { categories: regex }] }];
   }
   const externalPipeline: Array<PipelineStage.Match | PipelineStage.Project> = [
     { $match: externalFilter },
@@ -41,9 +47,9 @@ export async function combinedCatalogue(query: Record<string, unknown>, ownFilte
       _id: 0, id: { $toString: '$_id' }, kind: { $literal: 'external' }, title: 1, category: 1,
       posterUrl: 1, startsAt: '$startAt', datePrecision: 1, timezone: 1,
       priceFrom: '$price', currency: 1, venue: { name: '$venue', address: '$city' },
-      sources: { $filter: { input: '$sources', as: 'source', cond: { $and: [
-        { $eq: ['$$source.name', 'Ticketwala'] }, { $regexMatch: { input: { $ifNull: ['$$source.url', ''] }, regex: allowedSource } },
-      ] } } }, lastCheckedAt: 1,
+      sources: { $filter: { input: '$sources', as: 'source', cond: { $or: sourceRules.map((rule) => ({ $and: [
+        { $eq: ['$$source.name', rule.name] }, { $regexMatch: { input: { $ifNull: ['$$source.url', ''] }, regex: rule.url } },
+      ] })) } } }, lastCheckedAt: 1,
     } },
   ];
   const ownPipeline: PipelineStage[] = [

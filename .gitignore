@@ -14,6 +14,11 @@ coverage/
 .cache/
 server/.mongodb-binaries/
 
+# Local agent tooling and Python bytecode
+.agents/
+__pycache__/
+*.py[cod]
+
 # Operating system and editor files
 .DS_Store
 Thumbs.db

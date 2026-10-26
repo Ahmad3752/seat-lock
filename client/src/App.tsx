@@ -7,6 +7,7 @@ import { EventCataloguePage, PublicEventDetailPage } from "./public-events/Publi
 import { BookingHistory } from "./bookings/BookingHistory";
 import { EventReport } from "./organizer/EventReport";
 import { AdminPage } from "./admin/AdminPage";
+import { BrandMark, Icon, TicketArtwork } from "./components/Icon";
 import "./App.css";
 
 type Mode = "login" | "register";
@@ -32,34 +33,45 @@ function usePathname() {
   return { pathname, navigate };
 }
 
-function RouteLink({ to, navigate, children, className }: PropsWithChildren<{ to: string; navigate: (to: string) => void; className?: string }>) {
-  return <a className={className} href={to} onClick={(event) => {
+function RouteLink({ to, navigate, children, className, active }: PropsWithChildren<{ to: string; navigate: (to: string) => void; className?: string; active?: boolean }>) {
+  return <a className={className} href={to} aria-current={active ? "page" : undefined} onClick={(event) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     navigate(to);
   }}>{children}</a>;
 }
 
-function Navigation({ user, navigate, logout }: { user: AuthUser; navigate: (to: string) => void; logout: () => Promise<void> }) {
-  return <header className="site-header">
-    <RouteLink to="/" navigate={navigate} className="brand"><span className="brand-mark">S</span><span>SeatLock</span></RouteLink>
+function Navigation({ user, navigate, logout, pathname }: { user: AuthUser; navigate: (to: string) => void; logout: () => Promise<void>; pathname: string }) {
+  return <header className="site-header"><div className="header-inner header-inner-authenticated">
+    <RouteLink to="/events" navigate={navigate} className="brand"><BrandMark /><span>SeatLock<span className="brand-dot">.</span></span></RouteLink>
     <nav aria-label="Main navigation">
-      <RouteLink to="/events" navigate={navigate}>Events</RouteLink>
-      {(user.role === "customer" || user.role === "organizer") && <RouteLink to="/dashboard" navigate={navigate}>Dashboard</RouteLink>}
-      {user.role === "organizer" && <RouteLink to="/my-bookings" navigate={navigate}>My bookings</RouteLink>}
-      {user.role === "organizer" && <RouteLink to="/organizer" navigate={navigate}>Organizer</RouteLink>}
-      {user.role === "admin" && <RouteLink to="/admin" navigate={navigate}>Admin</RouteLink>}
-      <span className="role" title={`Signed in as ${user.email}`}>{user.role}</span>
-      <button type="button" className="text-button" onClick={() => void logout().then(() => navigate("/"))}>Sign out</button>
+      <div className="nav-links">
+        <RouteLink to="/events" navigate={navigate} active={pathname.startsWith("/events")}><Icon name="search" />Events</RouteLink>
+        {(user.role === "customer" || user.role === "organizer") && <RouteLink to="/dashboard" navigate={navigate} active={pathname === "/dashboard" || pathname === "/my-bookings"}><Icon name="ticket" />My bookings</RouteLink>}
+        {user.role === "organizer" && <RouteLink to="/organizer" navigate={navigate} active={pathname.startsWith("/organizer")}><Icon name="grid" />Organizer</RouteLink>}
+        {user.role === "admin" && <RouteLink to="/admin" navigate={navigate} active={pathname.startsWith("/admin")}><Icon name="shield" />Admin</RouteLink>}
+      </div>
+      <div className="nav-account"><span className="role" title={`Signed in as ${user.email}`}>{user.role}</span>
+        <button type="button" className="text-button" onClick={() => void logout().then(() => navigate("/"))}><Icon name="logout" />Sign out</button>
+      </div>
     </nav>
-  </header>;
+  </div></header>;
 }
 
 function PublicNavigation({ navigate }: { navigate: (to: string) => void }) {
-  return <header className="site-header">
-    <RouteLink to="/events" navigate={navigate} className="brand"><span className="brand-mark">S</span><span>SeatLock</span></RouteLink>
-    <nav aria-label="Main navigation"><RouteLink to="/events" navigate={navigate}>Events</RouteLink><RouteLink to="/login" navigate={navigate}>Sign in</RouteLink></nav>
-  </header>;
+  return <header className="site-header"><div className="header-inner">
+    <RouteLink to="/events" navigate={navigate} className="brand"><BrandMark /><span>SeatLock<span className="brand-dot">.</span></span><span className="brand-descriptor">Experiences worth showing up for.</span></RouteLink>
+    <nav aria-label="Main navigation"><RouteLink to="/events" navigate={navigate} active={window.location.pathname === "/events"}>Explore events</RouteLink><RouteLink to="/login" navigate={navigate} className="nav-signin">Sign in<Icon name="arrow" /></RouteLink></nav>
+  </div></header>;
+}
+
+function AppShell({ user, navigate, logout, pathname, children }: PropsWithChildren<{ user: AuthUser | null; navigate: (to: string) => void; logout: () => Promise<void>; pathname: string }>) {
+  return <div className="app-page">
+    <a className="skip-link" href="#main-content">Skip to content</a>
+    {user ? <Navigation user={user} navigate={navigate} logout={logout} pathname={pathname} /> : <PublicNavigation navigate={navigate} />}
+    <main className="page-content" id="main-content" tabIndex={-1}>{children}</main>
+    <footer className="site-footer"><RouteLink to="/events" navigate={navigate} className="brand"><BrandMark /><span>SeatLock.</span></RouteLink><p className="footer-note">Discover the moment. Find your seat.</p><span>Made for memorable experiences.</span></footer>
+  </div>;
 }
 
 function AuthScreen({ navigate, returnTo }: { navigate: (to: string) => void; returnTo?: string }) {
@@ -99,15 +111,16 @@ function AuthScreen({ navigate, returnTo }: { navigate: (to: string) => void; re
   }
 
   return <section className="card auth-card" aria-labelledby="auth-heading">
-    <p className="eyebrow">ACCOUNT</p>
+    <div className="auth-lock"><Icon name="user" /></div>
+    <p className="eyebrow">YOUR SEATLOCK ACCOUNT</p>
     <h1 id="auth-heading">{mode === "login" ? "Welcome back" : "Create your account"}</h1>
-    <p className="muted">{mode === "login" ? "Customer sign-in uses your registered email and password." : "Start as a customer. Organizer access is assigned securely."}</p>
+    <p className="muted">{mode === "login" ? "Sign in to find your next experience and keep your tickets in one place." : "Your next great experience starts here. Create your customer account to get started."}</p>
     <form onSubmit={(event) => void submit(event)}>
       {mode === "register" && <label>Full name<input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" required minLength={2} maxLength={80} /></label>}
-      <label>{mode === "login" ? "Email address or demo username" : "Email address"}<input type={mode === "login" ? "text" : "email"} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete={mode === "login" ? "username" : "email"} required /></label>
+      <label>{mode === "login" ? "Email address or demo username" : "Email address"}<input type={mode === "login" ? "text" : "email"} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete={mode === "login" ? "username" : "email"} placeholder="you@example.com" required /></label>
       <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required minLength={8} /></label>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button type="submit" disabled={isSubmitting}>{isSubmitting ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
+      <button type="submit" disabled={isSubmitting}>{isSubmitting ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}<Icon name="arrow" /></button>
     </form>
     {mode === "login" && <div className="demo-logins">
       <p className="demo-title">Development role demos</p>
@@ -127,9 +140,9 @@ function AccessDenied({ user, navigate }: { user: AuthUser; navigate: (to: strin
 }
 
 function OrganizerDashboard({ user, navigate }: { user: AuthUser; navigate: (to: string) => void }) {
-  return <DashboardShell eyebrow="ORGANIZER DASHBOARD" title={`Manage your events, ${user.name}.`} description="This workspace is limited to venues and events that you own.">
-    <DashboardCard title="My events" text="Create draft events, set prices, and publish when ready." action="Manage events" onAction={() => navigate("/organizer/events")} />
-    <DashboardCard title="Venues" text="Build reusable venues and grid-based seating plans." action="Manage venues" onAction={() => navigate("/organizer/venues")} />
+  return <DashboardShell eyebrow="ORGANIZER WORKSPACE" title={`Make it memorable, ${user.name}.`} description="From the first seat to the final curtain. Everything you need to bring your events together.">
+    <DashboardCard icon="calendar" title="My events" text="Create your next event, fine-tune the details, and publish when you're ready." action="Manage events" onAction={() => navigate("/organizer/events")} />
+    <DashboardCard icon="venue" title="Venues & seating" text="Give every guest a great spot with reusable venues and clear seating plans." action="Manage venues" onAction={() => navigate("/organizer/venues")} />
   </DashboardShell>;
 }
 
@@ -137,19 +150,19 @@ function DashboardShell({ eyebrow, title, description, children }: PropsWithChil
   return <section className="dashboard" aria-labelledby="dashboard-heading"><div className="dashboard-intro"><p className="eyebrow">{eyebrow}</p><h1 id="dashboard-heading">{title}</h1><p className="muted">{description}</p></div><div className="dashboard-grid">{children}</div></section>;
 }
 
-function DashboardCard({ title, text, action, mutedAction = false, onAction }: { title: string; text: string; action: string; mutedAction?: boolean; onAction?: () => void }) {
-  return <article className="card dashboard-card"><h2>{title}</h2><p>{text}</p><button type="button" className={mutedAction ? "secondary" : ""} disabled={mutedAction} onClick={onAction}>{action}</button></article>;
+function DashboardCard({ title, text, action, icon = "ticket", mutedAction = false, onAction }: { title: string; text: string; action: string; icon?: "calendar" | "venue" | "ticket"; mutedAction?: boolean; onAction?: () => void }) {
+  return <article className="card dashboard-card"><div className="dashboard-card-icon"><Icon name={icon} /></div><h2>{title}</h2><p>{text}</p><button type="button" className={mutedAction ? "secondary" : ""} disabled={mutedAction} onClick={onAction}>{action}<Icon name="arrow" /></button></article>;
 }
 
 function App() {
   const { user, isLoading, logout } = useAuth();
   const { pathname, navigate } = usePathname();
-  if (isLoading) return <main className="loading-page"><p className="muted">Restoring your session…</p></main>;
+  if (isLoading) return <main className="loading-page"><BrandMark /><p className="muted" role="status">Restoring your session…</p></main>;
   const eventSlug = /^\/events\/([^/]+)$/.exec(pathname)?.[1];
-  if (pathname === "/events" || eventSlug) return <main className="app-page">{user ? <Navigation user={user} navigate={navigate} logout={logout} /> : <PublicNavigation navigate={navigate} />}{pathname === "/events" ? <EventCataloguePage navigate={navigate} /> : <PublicEventDetailPage key={eventSlug} slug={eventSlug!} navigate={navigate} user={user} />}</main>;
+  if (pathname === "/events" || eventSlug) return <AppShell user={user} navigate={navigate} logout={logout} pathname={pathname}>{pathname === "/events" ? <EventCataloguePage navigate={navigate} /> : <PublicEventDetailPage key={eventSlug} slug={eventSlug!} navigate={navigate} user={user} />}</AppShell>;
   if (!user) {
     const returnTo = new URLSearchParams(window.location.search).get("returnTo") ?? undefined;
-    return <main className="auth-page"><header className="brand"><span className="brand-mark">S</span><span>SeatLock</span></header><AuthScreen navigate={navigate} returnTo={returnTo} /></main>;
+    return <main className="auth-page"><aside className="auth-story"><RouteLink to="/events" navigate={navigate} className="brand"><BrandMark /><span>SeatLock<span className="brand-dot">.</span></span></RouteLink><div className="auth-story-body"><p className="eyebrow">BE THERE FOR IT.</p><div className="auth-story-title">Less ordinary.<br /><span>More unforgettable.</span></div><p>Discover events you love. Choose your spot. Make room for your next great memory.</p><TicketArtwork /></div><p className="auth-story-footer"><Icon name="ticket" />Your next experience is just a seat away.</p></aside><div className="auth-main"><RouteLink to="/events" navigate={navigate} className="text-button back-link">← Back to events</RouteLink><AuthScreen navigate={navigate} returnTo={returnTo} /></div></main>;
   }
 
   let content;
@@ -166,7 +179,7 @@ function App() {
   else if (pathname === "/organizer") content = user.role === "organizer" || user.role === "admin" ? <OrganizerDashboard user={user} navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
   else if (pathname === "/admin") content = user.role === "admin" ? <AdminPage navigate={navigate} /> : <AccessDenied user={user} navigate={navigate} />;
   else content = <AccessDenied user={user} navigate={navigate} />;
-  return <main className="app-page"><Navigation user={user} navigate={navigate} logout={logout} />{content}</main>;
+  return <AppShell user={user} navigate={navigate} logout={logout} pathname={pathname}>{content}</AppShell>;
 }
 
 export default App;

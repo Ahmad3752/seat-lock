@@ -5,6 +5,7 @@ import { ApiError, api } from "../lib/api";
 import { buildEventQuery, MAX_SEAT_SELECTION, toggleSeatSelection, type EventFilters, type PublicSeat } from "./publicEventUtils";
 import { formatHoldCountdown, reconcileSelectedSeats, remainingHoldSeconds } from "./holdUtils";
 import { io } from "socket.io-client";
+import { Icon, TicketArtwork } from "../components/Icon";
 
 type Navigate = (to: string) => void;
 type PublicEventCard = { id: string; slug?: string; kind?: 'seatlock' | 'external'; title: string; category: string | null; posterUrl?: string | null; startsAt: string; priceFrom: number | null; currency?: string | null; timezone?: string | null; datePrecision?: 'date' | 'datetime'; sources?: Array<{ name: string; url: string }>; venue: { name: string | null; address: string | null } };
@@ -26,28 +27,38 @@ function PublicLink({ to, navigate, children, className }: { to: string; navigat
 
 function Poster({ src, title }: { src?: string | null; title: string }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  if (!src || failedSrc === src) return <div className="event-poster event-poster-fallback" aria-label={`No poster available for ${title}`}>SeatLock<br />Event</div>;
-  return <img className="event-poster" src={src} alt={`${title} poster`} onError={() => setFailedSrc(src)} />;
+  if (!src || failedSrc === src) return <div className="event-poster event-poster-fallback" role="img" aria-label={`No poster available for ${title}`}><Icon name="ticket" /><span>{title}</span></div>;
+  return <img className="event-poster" src={src} alt={`${title} poster`} width="600" height="360" loading="lazy" decoding="async" onError={() => setFailedSrc(src)} />;
 }
 
 function CatalogueCard({ event, navigate }: { event: PublicEventCard; navigate: Navigate }) {
   const external = event.kind === 'external';
-  const sources = (event.sources ?? []).filter((source) => /^https:\/\/(?:www\.)?ticketwala\.(?:pk|events)\/event\//.test(source.url));
+  const sourcePatterns: Record<string, RegExp> = {
+    Ticketwala: /^https:\/\/(?:www\.)?ticketwala\.(?:pk|events)\/event\/[a-zA-Z0-9_~%./-]+(?:\?[^\s#]*)?$/,
+    AllEvents: /^https:\/\/(?:www\.)?allevents\.in\/(?:islamabad\/[^\s?#]+\/|event\/)\d+\/?(?:\?[^\s#]*)?$/,
+    Shapargullay: /^https:\/\/(?:www\.)?shapargullay\.com\/events\/[a-zA-Z0-9_-]+\/?$/,
+    Bookme: /^https:\/\/(?:www\.)?bookme\.pk\/events\/[a-zA-Z0-9_-]+\/?$/,
+    'Media Sniffers': /^https:\/\/(?:www\.)?mediasniffers\.pk\/upcoming-music-events-in-pakistan-2026-organized-by-media-sniffers\/?$/,
+  };
+  const sources = (event.sources ?? []).filter((source) => sourcePatterns[source.name]?.test(source.url));
   const dateOptions: Intl.DateTimeFormatOptions = { dateStyle: 'medium', ...(event.datePrecision === 'date' ? {} : { timeStyle: 'short' as const }) };
   let dateFormat: Intl.DateTimeFormat;
   try { dateFormat = new Intl.DateTimeFormat('en-PK', { ...dateOptions, timeZone: event.timezone || 'Asia/Karachi' }); }
   catch { dateFormat = new Intl.DateTimeFormat('en-PK', { ...dateOptions, timeZone: 'Asia/Karachi' }); }
   const date = dateFormat.format(new Date(event.startsAt));
+  const badgeTimezone = dateFormat.resolvedOptions().timeZone;
+  const day = new Intl.DateTimeFormat('en-PK', { day: '2-digit', timeZone: badgeTimezone }).format(new Date(event.startsAt));
+  const month = new Intl.DateTimeFormat('en-PK', { month: 'short', timeZone: badgeTimezone }).format(new Date(event.startsAt));
   const price = event.priceFrom == null ? 'Price not listed' : event.priceFrom === 0 ? 'Free' : `From ${new Intl.NumberFormat('en-PK', { style: 'currency', currency: event.currency || 'PKR' }).format(event.priceFrom)}`;
   return <article className="event-card card">
-    <Poster src={event.posterUrl} title={event.title} />
+    <div className="event-card-art"><Poster src={event.posterUrl} title={event.title} /><div className="event-date-badge" aria-hidden="true"><strong>{day}</strong><span>{month}</span></div></div>
     <div className="event-card-body">
-      <p className="eyebrow">{event.category || 'Event'} · {external ? 'External event' : 'SeatLock'}</p>
-      <h2>{external ? (sources[0] ? <a href={sources[0].url} target="_blank" rel="noopener noreferrer">{event.title}</a> : event.title) : <PublicLink to={`/events/${event.slug}`} navigate={navigate}>{event.title}</PublicLink>}</h2>
-      <p>{event.venue.name || 'Venue to be announced'}{event.venue.address ? ` · ${event.venue.address}` : ''}</p>
-      <p>{date}{event.datePrecision === 'date' ? ' · Time to be announced' : ''}</p>
-      <strong>{price}</strong>
-      {external && <div className="event-source-links">{sources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer">View on {source.name} ↗</a>)}</div>}
+      <p className="eyebrow"><span>{event.category || 'Event'}</span><span className="event-origin">{external ? 'External event' : 'SeatLock'}</span></p>
+      <h3>{external ? (sources[0] ? <a href={sources[0].url} target="_blank" rel="noopener noreferrer">{event.title}</a> : event.title) : <PublicLink to={`/events/${event.slug}`} navigate={navigate}>{event.title}</PublicLink>}</h3>
+      <p className="event-meta"><Icon name="pin" /><span>{event.venue.name || 'Venue to be announced'}{event.venue.address ? ` · ${event.venue.address}` : ''}</span></p>
+      <p className="event-meta"><Icon name="calendar" /><span>{date}{event.datePrecision === 'date' ? ' · Time to be announced' : ''}</span></p>
+      <div className="event-price-row"><strong>{price}</strong><Icon name={external ? "external" : "arrow"} /></div>
+      {external && <div className="event-source-links">{sources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer">View on {source.name}<Icon name="external" /></a>)}</div>}
     </div>
   </article>;
 }
@@ -101,18 +112,19 @@ export function EventCataloguePage({ navigate }: { navigate: Navigate }) {
   }
 
   return <section className="public-events-page" aria-labelledby="events-heading">
-    <div className="public-intro"><p className="eyebrow">DISCOVER EVENTS</p><h1 id="events-heading">Find your next experience.</h1><p className="muted">Explore upcoming events. Book with SeatLock or visit the event's original provider.</p></div>
+    <div className="discovery-hero"><div className="public-intro"><p className="eyebrow">GO OUT. BE THERE. FEEL IT.</p><h1 id="events-heading">Find your next<br /><span>experience.</span></h1><p className="muted">The shows, the sounds, the moments you’ll talk about later. Discover what’s happening and find your place in it.</p><div className="hero-details"><span><Icon name="calendar" />Discover upcoming events</span><span><Icon name="ticket" />Find your kind of experience</span></div></div><TicketArtwork /></div>
     <form className="event-filters card" onSubmit={submit} aria-label="Filter events">
-      <label>Search events<input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Artist, show, or event" /></label>
+      <label>Search events<span className="input-with-icon"><Icon name="search" /><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Artist, show, or event" /></span></label>
       <label>Category<select value={filters.category} onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))}><option value="">All categories</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
       <label>From<input type="date" value={filters.from} onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))} /></label>
       <label>To<input type="date" value={filters.to} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} /></label>
       <div className="filter-actions"><button type="submit">Apply filters</button><button type="button" className="text-button" onClick={clearFilters}>Clear</button></div>
       {categoriesError && <p className="form-error" role="status">Could not load categories. Refresh the page to try again.</p>}
     </form>
-    {loading && <p className="public-state muted" aria-live="polite">Loading upcoming events…</p>}
+    <div className="catalogue-heading"><h2>Upcoming events {!loading && !error && <span className="catalogue-count">{pagination.total}</span>}</h2><p>Find something worth going to.</p></div>
+    {loading && <div className="catalogue-loading" role="status"><p className="loading-label">Loading upcoming events…</p>{[0, 1, 2].map((item) => <div className="skeleton-card" key={item} aria-hidden="true"><div className="skeleton-poster" /><div className="skeleton-line" /><div className="skeleton-line" /><div className="skeleton-line" /></div>)}</div>}
     {!loading && error && <section className="card public-state" role="alert"><h2>We could not load events</h2><p>{error}</p><button type="button" onClick={() => { setError(""); setLoading(true); setReloadKey((current) => current + 1); }}>Try again</button></section>}
-    {!loading && !error && events.length === 0 && <section className="card public-state"><h2>No upcoming events found</h2><p>Try adjusting your search or filters.</p><button type="button" className="secondary" onClick={clearFilters}>Clear filters</button></section>}
+    {!loading && !error && events.length === 0 && <section className="card public-state"><div className="state-icon"><Icon name="search" /></div><h2>No upcoming events found</h2><p>Try adjusting your search or filters.</p><button type="button" className="secondary" onClick={clearFilters}>Clear filters</button></section>}
     {!loading && !error && events.length > 0 && <div className="event-catalogue">{events.map((event) => <CatalogueCard key={`${event.kind || 'seatlock'}:${event.id}`} event={event} navigate={navigate} />)}</div>}
     {!loading && !error && pagination.pages > 1 && <nav className="event-pagination" aria-label="Event pages">
       <button type="button" disabled={page <= 1} onClick={() => { setLoading(true); setPage(page - 1); }}>Previous</button>
@@ -126,11 +138,11 @@ function SeatMap({ seats, selectedSeatIds, onToggle, locked }: { seats: PublicSe
   const sections = useMemo(() => [...new Set(seats.map((seat) => seat.section))].map((section) => ({ section, seats: seats.filter((seat) => seat.section === section) })), [seats]);
   return <div className="seat-sections" aria-label="Seat map">{sections.map(({ section, seats: sectionSeats }) => {
     const columns = Math.max(...sectionSeats.map((seat) => seat.x));
-    return <section className="seat-section" key={section} aria-labelledby={`section-${section}`}><h3 id={`section-${section}`}>Section {section}</h3><div className="seat-grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(3.35rem, 1fr))` }}>{sectionSeats.map((seat) => {
+    return <section className="seat-section" key={section} aria-labelledby={`section-${section}`} tabIndex={0}><h3 id={`section-${section}`}>Section {section}</h3><div className="seat-grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(3.35rem, 1fr))` }}>{sectionSeats.map((seat) => {
       const selected = selectedSeatIds.has(seat.id);
       const selectable = !locked && seat.state === "available";
       const accessibility = seat.accessibility.isAccessible ? ", accessible" : "";
-      return <button type="button" key={seat.id} className={`seat seat-${seat.state}${selected ? " seat-selected" : ""}`} style={{ gridColumn: seat.x, gridRow: seat.y }} disabled={!selectable} aria-pressed={selected} aria-label={`${seat.label}, ${seat.state}${accessibility}, ${money(seat.price)}`} onClick={() => onToggle(seat)}><span>{seat.label}</span><small>{seat.state}</small></button>;
+      return <button type="button" key={seat.id} className={`seat seat-${seat.state}${selected ? " seat-selected" : ""}`} style={{ gridColumn: seat.x, gridRow: seat.y }} disabled={!selectable} aria-pressed={selected} aria-label={`${seat.label}, ${seat.state}${accessibility}, ${money(seat.price)}`} onClick={() => onToggle(seat)}><span>{seat.label}</span><small>{selected ? "Selected" : seat.state}</small></button>;
     })}</div></section>;
   })}</div>;
 }
